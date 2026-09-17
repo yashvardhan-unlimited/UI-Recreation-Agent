@@ -1,0 +1,1 @@
+Act as frontend implementer. Follow the approved specification, existing conventions, strict typing, semantic HTML, accessible behavior, responsive states, and reduced motion. Checkpoint before broad changes and use targeted hash-guarded patches.

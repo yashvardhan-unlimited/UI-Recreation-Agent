@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "interaction": "high",
+  "model": {
+    "discoveryUrl": "http://127.0.0.1:18080/api/tags",
+    "inferenceBaseUrl": "http://127.0.0.1:18080/v1",
+    "protocol": "openai-completions",
+    "codingModelId": "qwen3.8:27b",
+    "visualModelId": "qwen3.8:27b",
+    "contextWindow": 262144,
+    "maxOutputTokens": 8192,
+    "requestTimeoutMs": 180000,
+    "retry": { "maxAttempts": 2, "baseDelayMs": 750 },
+    "thinking": "off",
+    "temperature": 0.2,
+    "maxAttachedImages": 2,
+    "maxImageBytes": 8388608,
+    "auth": {}
+  },
+  "workflow": {
+    "maxRepairRounds": 3,
+    "maxElapsedMs": 2700000,
+    "perToolTimeoutMs": 120000,
+    "maxStagnantRounds": 2
+  },
+  "browser": {
+    "browserName": "chromium",
+    "headless": true,
+    "viewports": [
+      { "name": "desktop", "width": 1440, "height": 900, "deviceScaleFactor": 1 },
+      { "name": "tablet", "width": 1024, "height": 768, "deviceScaleFactor": 1 },
+      { "name": "mobile", "width": 390, "height": 844, "deviceScaleFactor": 1 }
+    ],
+    "screenshot": { "maxWidth": 3000, "maxHeight": 12000, "maxCountPerRun": 80 }
+  },
+  "quality": {
+    "axeImpactBlocklist": ["serious", "critical"],
+    "lighthouse": { "enabled": true, "performance": 0.75, "accessibility": 0.9 }
+  },
+  "imageSearch": {
+    "providers": ["openverse"],
+    "permittedDomains": ["api.openverse.org", "commons.wikimedia.org", "upload.wikimedia.org"],
+    "resultLimit": 12,
+    "downloadLimit": 5,
+    "safeSearch": "strict",
+    "acceptedLicenses": ["cc0", "pdm", "by", "by-sa"],
+    "requireAttribution": true,
+    "requireExplicitApproval": true,
+    "maxBytes": 15728640,
+    "maxWidth": 12000,
+    "maxHeight": 12000,
+    "maxDecodedPixels": 40000000
+  }
+}

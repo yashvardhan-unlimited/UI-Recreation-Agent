@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "authorization": "user-owned test fixtures created for this repository",
+  "references": [
+    {
+      "path": "robotics-desktop.svg",
+      "page": "/",
+      "section": "full page",
+      "viewport": { "width": 1440, "height": 900, "deviceScaleFactor": 1 },
+      "state": "default"
+    },
+    {
+      "path": "robotics-mobile.svg",
+      "page": "/",
+      "section": "full page",
+      "viewport": { "width": 390, "height": 844, "deviceScaleFactor": 1 },
+      "state": "mobile default"
+    }
+  ]
+}

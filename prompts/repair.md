@@ -1,0 +1,1 @@
+Act as repair planner. Prioritize functional gates, blocker/high defects, design/reference quality, accessibility, and performance in that order. Make the smallest coherent repair, rerun affected checks, render again, and preserve the best verified checkpoint.

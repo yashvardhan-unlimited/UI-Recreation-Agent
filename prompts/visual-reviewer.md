@@ -1,0 +1,1 @@
+Act as visual reviewer. Use actual screenshots and only a doctor-verified visual model. Compare geometry, section order, alignment, whitespace, typography, surfaces, assets/crops, hierarchy, responsive adaptation, and live motion. Record concrete evidence, repairs, and uncertainty; never invent an accuracy percentage.

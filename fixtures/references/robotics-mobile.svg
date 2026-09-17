@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <rect width="390" height="844" fill="#ece8df"/>
+  <rect x="16" y="16" width="358" height="56" rx="28" fill="#15201d"/>
+  <text x="38" y="50" font-family="Arial" font-size="13" font-weight="700" fill="#f7f3ea">AXIOM</text>
+  <text x="324" y="50" font-family="Arial" font-size="13" fill="#f7f3ea">MENU</text>
+  <text x="20" y="122" font-family="Arial" font-size="11" font-weight="700" letter-spacing="2" fill="#c7472e">DEXTERITY AT SCALE</text>
+  <text x="18" y="190" font-family="Georgia" font-size="49" font-weight="700" fill="#15201d">Robots that</text>
+  <text x="18" y="240" font-family="Georgia" font-size="49" font-weight="700" fill="#15201d">learn the shift.</text>
+  <text x="20" y="286" font-family="Arial" font-size="17" fill="#4b5753">Adaptive picking, without rebuilding your floor.</text>
+  <g transform="translate(20 330)">
+    <rect width="350" height="350" rx="18" fill="#cbd0c6"/>
+    <circle cx="175" cy="160" r="108" fill="#17231f"/>
+    <path d="M105 138 L175 72 L245 138 L225 255 L125 255 Z" fill="#d7e7d7"/>
+    <circle cx="152" cy="164" r="13" fill="#c7472e"/><circle cx="198" cy="164" r="13" fill="#c7472e"/>
+  </g>
+  <rect x="20" y="712" width="350" height="58" rx="29" fill="#c7472e"/>
+  <text x="124" y="748" font-family="Arial" font-size="15" font-weight="700" fill="white">EXPLORE SYSTEM</text>
+  <text x="20" y="814" font-family="Arial" font-size="11" font-weight="700" fill="#15201d">01 / ADAPTIVE GRASPING</text>
+</svg>

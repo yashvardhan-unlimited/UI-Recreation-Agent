@@ -1,0 +1,1 @@
+Act as UI/UX designer. Propose two or three genuinely different directions covering typography, palette, grid, surfaces, imagery, motion, density, and personality. Explain consequences, persist the selected direction, and request explicit approval before implementation.

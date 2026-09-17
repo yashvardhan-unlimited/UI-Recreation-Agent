@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <rect width="1440" height="900" fill="#ece8df"/>
+  <rect x="32" y="28" width="1376" height="72" rx="36" fill="#15201d"/>
+  <text x="72" y="73" font-family="Arial" font-size="20" font-weight="700" fill="#f7f3ea">AXIOM / ROBOTICS</text>
+  <text x="1200" y="73" font-family="Arial" font-size="15" fill="#f7f3ea">REQUEST PILOT →</text>
+  <text x="56" y="180" font-family="Arial" font-size="16" font-weight="700" letter-spacing="4" fill="#c7472e">DEXTERITY AT SCALE</text>
+  <text x="52" y="300" font-family="Georgia" font-size="104" font-weight="700" fill="#15201d">Robots that</text>
+  <text x="52" y="398" font-family="Georgia" font-size="104" font-weight="700" fill="#15201d">learn the shift.</text>
+  <text x="60" y="485" font-family="Arial" font-size="24" fill="#4b5753">Deploy adaptive picking without rebuilding your floor.</text>
+  <rect x="60" y="545" width="184" height="58" rx="29" fill="#c7472e"/>
+  <text x="93" y="581" font-family="Arial" font-size="16" font-weight="700" fill="white">EXPLORE SYSTEM</text>
+  <g transform="translate(790 170)">
+    <rect width="560" height="560" rx="24" fill="#cbd0c6"/>
+    <circle cx="280" cy="250" r="172" fill="#17231f"/>
+    <path d="M175 210 L280 110 L385 210 L350 385 L210 385 Z" fill="#d7e7d7"/>
+    <circle cx="245" cy="250" r="20" fill="#c7472e"/><circle cx="315" cy="250" r="20" fill="#c7472e"/>
+    <path d="M235 320 Q280 350 325 320" fill="none" stroke="#17231f" stroke-width="12"/>
+  </g>
+  <text x="60" y="830" font-family="Arial" font-size="14" font-weight="700" fill="#15201d">01 / ADAPTIVE GRASPING</text>
+  <line x1="60" y1="850" x2="1380" y2="850" stroke="#8f9893"/>
+</svg>

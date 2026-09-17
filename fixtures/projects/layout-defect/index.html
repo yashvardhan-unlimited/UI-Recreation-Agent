@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deliberate overflow fixture</title>
+    <style>
+      :root { color: #17201d; background: #f2ede2; font-family: Arial, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      :focus-visible { outline: 3px solid #bd4b32; outline-offset: 4px; }
+      main { width: min(72rem, calc(100% - 2rem)); margin: auto; padding: 5rem 0; }
+      h1 { max-width: 12ch; font-size: clamp(3rem, 9vw, 7rem); line-height: .92; letter-spacing: -.05em; }
+      .rail { display: grid; grid-template-columns: repeat(3, minmax(19rem, 1fr)); gap: 1rem; width: 120vw; }
+      article { min-height: 14rem; padding: 1.5rem; color: white; background: #17201d; border-radius: 1rem; }
+      details { margin-top: 2rem; max-width: 42rem; }
+      summary { cursor: pointer; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>UI Agent repair fixture</p>
+      <h1>A deliberate mobile layout defect.</h1>
+      <section class="rail" aria-label="Capabilities">
+        <article><h2>Perception</h2><p>Deterministic sensing for complex workspaces.</p></article>
+        <article><h2>Planning</h2><p>Human-legible decisions and bounded motion.</p></article>
+        <article><h2>Control</h2><p>Responsive systems with safe fallbacks.</p></article>
+      </section>
+      <details><summary>Fixture interaction</summary><p>This disclosure must remain keyboard operable after repair.</p></details>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.ui-agent/
+coverage/
+playwright-report/
+test-results/
+examples/generated/
+*.log
+.env
+.env.*
+!.env.example
