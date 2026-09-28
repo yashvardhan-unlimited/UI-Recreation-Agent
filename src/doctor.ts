@@ -13,7 +13,8 @@ import {
   type ExtensionFactory
 } from "@earendil-works/pi-coding-agent";
 import type { AppConfig } from "./config/schema.js";
-import { authHeaders, discoverModels, selectModels, verifyOpenAiModelsEndpoint } from "./model/discovery.js";
+import { loadProjectEnv } from "./config/load.js";
+import { authHeaders, resolveModelBackend } from "./model/discovery.js";
 import { probeSingleVision, probeStructuredJson, probeText, probeToolCalling, probeVisionComparison } from "./model/capabilities.js";
 import type { CapabilityEvidence, OllamaModel } from "./model/types.js";
 import { writeJsonAtomic, timestampForPath } from "./utils/fs.js";
@@ -36,6 +37,7 @@ export interface DoctorReport {
   createdAt: string;
   selectedCodingModel?: string;
   selectedVisualModel?: string;
+  selectedProvider?: "local-ollama" | "groq";
   installedModels: OllamaModel[];
   checks: DoctorCheck[];
   artifactRoot: string;
@@ -43,52 +45,57 @@ export interface DoctorReport {
 }
 
 export async function runDoctor(config: AppConfig, workspaceRoot: string): Promise<DoctorReport> {
+  loadProjectEnv(workspaceRoot);
   const artifactRoot = path.join(workspaceRoot, ".ui-agent", "doctor", timestampForPath());
   await mkdir(artifactRoot, { recursive: true });
   const checks: DoctorCheck[] = [];
   let installedModels: OllamaModel[] = [];
-  let selected: ReturnType<typeof selectModels> | undefined;
+  let selected: Awaited<ReturnType<typeof resolveModelBackend>>["selected"] | undefined;
+  let selectedProvider: "local-ollama" | "groq" | undefined;
+  let activeConfig = config;
   let endpointAvailable = false;
 
-  if (config.model.protocol !== "openai-completions") {
-    checks.push({ name: "protocol", status: "FAIL", testedUrl: config.model.inferenceBaseUrl, message: "The installed Pi SDK integration has no documented native Ollama agent provider.", suggestion: "Use protocol=openai-completions with the verified loopback /v1 base URL." });
-  }
-
-  const discoveryStart = performance.now();
+  const backendStart = performance.now();
   try {
-    installedModels = await discoverModels(config);
-    selected = selectModels(installedModels, config);
-    checks.push({ name: "discovery", status: "PASS", testedUrl: config.model.discoveryUrl, latencyMs: elapsed(discoveryStart), message: `Discovered ${installedModels.length} installed model(s).`, evidence: installedModels.map((model) => ({ name: model.name, digest: model.digest, size: model.size, details: model.details, advertisedCapabilities: model.capabilities })) });
-  } catch (error) { checks.push(failed("discovery", error, { testedUrl: config.model.discoveryUrl, started: discoveryStart, suggestion: "Start the loopback inference server and verify the discovery URL." })); }
-
-  const endpointStart = performance.now();
-  if (config.model.protocol === "openai-completions") {
-    try {
-      const ids = await verifyOpenAiModelsEndpoint(config);
-      if (selected && !ids.includes(selected.coding.name)) throw new Error(`Selected model ${selected.coding.name} was not returned by /v1/models.`);
-      endpointAvailable = true;
-      checks.push({ name: "inference_endpoint", status: "PASS", testedUrl: `${config.model.inferenceBaseUrl}/models`, ...(selected ? { modelId: selected.coding.name } : {}), latencyMs: elapsed(endpointStart), message: "OpenAI-compatible model endpoint is available.", evidence: ids });
-    } catch (error) { checks.push(failed("inference_endpoint", error, { testedUrl: `${config.model.inferenceBaseUrl}/models`, ...(selected ? { modelId: selected.coding.name } : {}), started: endpointStart, suggestion: "Use an inference base URL ending in /v1 and keep the local server running." })); }
-  } else {
-    checks.push({ name: "inference_endpoint", status: "NOT_CONFIGURED", testedUrl: config.model.inferenceBaseUrl, message: "No supported Pi inference protocol is configured.", suggestion: "Select openai-completions for this installed Pi version." });
+    const backend = await resolveModelBackend(config);
+    activeConfig = backend.config;
+    installedModels = backend.models;
+    selected = backend.selected;
+    selectedProvider = backend.provider;
+    endpointAvailable = true;
+    checks.push({
+      name: "backend_selection",
+      status: "PASS",
+      testedUrl: backend.modelsUrl,
+      modelId: selected.coding.name,
+      latencyMs: elapsed(backendStart),
+      message: backend.fallbackReason ? "Local inference is unavailable; Groq fallback is active." : `${backend.provider === "groq" ? "Groq" : "Local"} inference is active.`,
+      ...(backend.fallbackReason ? { evidence: { localFailure: backend.fallbackReason } } : {})
+    });
+    checks.push({ name: "discovery", status: "PASS", testedUrl: backend.discoveryUrl, modelId: selected.coding.name, message: `Discovered ${installedModels.length} configured model(s) from ${backend.provider}.`, evidence: installedModels.map((model) => ({ name: model.name, digest: model.digest, size: model.size, details: model.details, advertisedCapabilities: model.capabilities })) });
+    checks.push({ name: "inference_endpoint", status: "PASS", testedUrl: backend.modelsUrl, modelId: selected.coding.name, message: "OpenAI-compatible model endpoint is available.", evidence: installedModels.map((model) => model.name) });
+  } catch (error) {
+    checks.push(failed("backend_selection", error, { started: backendStart, suggestion: "Start the local endpoint, or add GROQ_API_KEY to .env for the automatic Groq fallback." }));
+    checks.push({ name: "discovery", status: "NOT_CONFIGURED", message: "No model backend could be selected." });
+    checks.push({ name: "inference_endpoint", status: "NOT_CONFIGURED", message: "No model backend could be selected." });
   }
 
   if (selected && endpointAvailable) {
-    await captureCapabilityCheck(checks, "text", () => probeText(config, selected!.coding.name), config, selected.coding.name);
-    await captureCapabilityCheck(checks, "structured_json", () => probeStructuredJson(config, selected!.coding.name), config, selected.coding.name);
-    await captureCapabilityCheck(checks, "tool_calling", () => probeToolCalling(config, selected!.coding.name), config, selected.coding.name);
-    await captureCapabilityCheck(checks, "pi_tool_roundtrip", () => probePiToolRoundtrip(config, selected!.coding, artifactRoot), config, selected.coding.name);
+    await captureCapabilityCheck(checks, "text", () => probeText(activeConfig, selected!.coding.name), activeConfig, selected.coding.name);
+    await captureCapabilityCheck(checks, "structured_json", () => probeStructuredJson(activeConfig, selected!.coding.name), activeConfig, selected.coding.name);
+    await captureCapabilityCheck(checks, "tool_calling", () => probeToolCalling(activeConfig, selected!.coding.name), activeConfig, selected.coding.name);
+    await captureCapabilityCheck(checks, "pi_tool_roundtrip", () => probePiToolRoundtrip(activeConfig, selected!.coding, artifactRoot, selectedProvider!), activeConfig, selected.coding.name);
     if (selected.visual) {
-      await captureCapabilityCheck(checks, "vision_single", () => probeSingleVision(config, selected!.visual!.name, path.join(artifactRoot, "vision")), config, selected.visual.name);
-      await captureCapabilityCheck(checks, "vision_compare", () => probeVisionComparison(config, selected!.visual!.name, path.join(artifactRoot, "vision")), config, selected.visual.name);
+      await captureCapabilityCheck(checks, "vision_single", () => probeSingleVision(activeConfig, selected!.visual!.name, path.join(artifactRoot, "vision")), activeConfig, selected.visual.name);
+      await captureCapabilityCheck(checks, "vision_compare", () => probeVisionComparison(activeConfig, selected!.visual!.name, path.join(artifactRoot, "vision")), activeConfig, selected.visual.name);
     } else {
-      checks.push({ name: "vision_single", status: "NOT_CONFIGURED", modelId: selected.coding.name, message: "No visual model was discovered/configured.", suggestion: "Set model.visualModelId to an installed local VLM and rerun doctor." });
-      checks.push({ name: "vision_compare", status: "NOT_CONFIGURED", modelId: selected.coding.name, message: "No visual model was discovered/configured.", suggestion: "Screenshot and URL recreation will be refused until a local VLM passes." });
+      checks.push({ name: "vision_single", status: "NOT_CONFIGURED", modelId: selected.coding.name, message: "No visual model was discovered/configured.", suggestion: "Set a visual model for the active backend and rerun doctor." });
+      checks.push({ name: "vision_compare", status: "NOT_CONFIGURED", modelId: selected.coding.name, message: "No visual model was discovered/configured.", suggestion: "Screenshot and URL recreation will be refused until a visual model passes." });
     }
   } else {
-    const reason = selected ? "The selected inference endpoint did not pass." : "No exact installed model could be selected from discovery.";
-    for (const name of ["text", "structured_json", "tool_calling", "pi_tool_roundtrip"] as const) checks.push({ name, status: "NOT_CONFIGURED", ...(selected ? { modelId: selected.coding.name } : {}), message: `${reason} This capability was not tested.`, suggestion: "Restore discovery and the /v1 endpoint, then rerun doctor." });
-    for (const name of ["vision_single", "vision_compare"] as const) checks.push({ name, status: "NOT_CONFIGURED", ...(selected?.visual ? { modelId: selected.visual.name } : {}), message: `${reason} Visual capability was not tested.`, suggestion: "Configure an installed local VLM and rerun doctor." });
+    const reason = selected ? "The selected inference endpoint did not pass." : "No model backend could be selected.";
+    for (const name of ["text", "structured_json", "tool_calling", "pi_tool_roundtrip"] as const) checks.push({ name, status: "NOT_CONFIGURED", ...(selected ? { modelId: selected.coding.name } : {}), message: `${reason} This capability was not tested.`, suggestion: "Restore local inference or configure GROQ_API_KEY, then rerun doctor." });
+    for (const name of ["vision_single", "vision_compare"] as const) checks.push({ name, status: "NOT_CONFIGURED", ...(selected?.visual ? { modelId: selected.visual.name } : {}), message: `${reason} Visual capability was not tested.`, suggestion: "Configure a visual model on the active backend and rerun doctor." });
   }
 
   await checkRuntime(checks, workspaceRoot);
@@ -98,6 +105,7 @@ export async function runDoctor(config: AppConfig, workspaceRoot: string): Promi
     createdAt: new Date().toISOString(),
     ...(selected ? { selectedCodingModel: selected.coding.name } : {}),
     ...(selected?.visual ? { selectedVisualModel: selected.visual.name } : {}),
+    ...(selectedProvider ? { selectedProvider } : {}),
     installedModels,
     checks,
     artifactRoot,
@@ -108,7 +116,7 @@ export async function runDoctor(config: AppConfig, workspaceRoot: string): Promi
   return report;
 }
 
-async function probePiToolRoundtrip(config: AppConfig, discovered: OllamaModel, artifactRoot: string): Promise<CapabilityEvidence> {
+async function probePiToolRoundtrip(config: AppConfig, discovered: OllamaModel, artifactRoot: string, provider: "local-ollama" | "groq"): Promise<CapabilityEvidence> {
   const started = performance.now();
   const projectRoot = path.join(artifactRoot, "pi-roundtrip");
   const agentDir = path.join(projectRoot, ".pi-agent");
@@ -130,13 +138,15 @@ async function probePiToolRoundtrip(config: AppConfig, discovered: OllamaModel, 
     });
   };
   const modelRuntime = await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
-  modelRuntime.registerProvider("doctor-local", {
-    baseUrl: config.model.inferenceBaseUrl, apiKey: "local-loopback", authHeader: false, headers: authHeaders(config), api: "openai-completions",
-    models: [{ id: discovered.name, name: discovered.name, reasoning: discovered.capabilities.includes("thinking"), thinkingLevelMap: { off: "none", minimal: "low", low: "low", medium: "medium", high: "high" }, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: discovered.details.context_length ?? config.model.contextWindow, maxTokens: Math.max(512, Math.min(config.model.maxOutputTokens, 2_048)), compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: true, maxTokensField: "max_tokens", thinkingFormat: "openai", supportsStrictMode: false } }]
+  const providerId = `doctor-${provider}`;
+  const runtimeKey = config.model.auth.environmentVariable ? process.env[config.model.auth.environmentVariable] ?? "" : "local-loopback";
+  modelRuntime.registerProvider(providerId, {
+    baseUrl: config.model.inferenceBaseUrl, apiKey: runtimeKey, authHeader: false, headers: authHeaders(config), api: "openai-completions",
+    models: [{ id: discovered.name, name: discovered.name, reasoning: discovered.capabilities.includes("thinking"), thinkingLevelMap: doctorThinkingLevelMap(provider, discovered.name), input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: discovered.details.context_length ?? config.model.contextWindow, maxTokens: Math.max(512, Math.min(config.model.maxOutputTokens, 2_048)), compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: true, maxTokensField: "max_tokens", thinkingFormat: "openai", supportsStrictMode: false } }]
   });
-  await modelRuntime.setRuntimeApiKey("doctor-local", "local-loopback");
-  const model = modelRuntime.getModel("doctor-local", discovered.name)!;
-  const settingsManager = SettingsManager.inMemory({ defaultThinkingLevel: "off", retry: { enabled: false }, compaction: { enabled: false } });
+  await modelRuntime.setRuntimeApiKey(providerId, runtimeKey);
+  const model = modelRuntime.getModel(providerId, discovered.name)!;
+  const settingsManager = SettingsManager.inMemory({ defaultThinkingLevel: "off", retry: { enabled: true, maxRetries: Math.max(1, config.model.retry.maxAttempts - 1), baseDelayMs: config.model.retry.baseDelayMs, provider: { timeoutMs: config.model.requestTimeoutMs, maxRetries: Math.max(1, config.model.retry.maxAttempts - 1) } }, compaction: { enabled: false } });
   const loader = new DefaultResourceLoader({ cwd: projectRoot, agentDir, settingsManager, extensionFactories: [{ name: "doctor", factory: extension }], noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, systemPrompt: "You are a capability doctor. Always use the required tool, then state the exact token from its result." });
   await loader.reload({ resolveProjectTrust: async () => false });
   const { session } = await createAgentSession({ cwd: projectRoot, agentDir, modelRuntime, model, thinkingLevel: "off", tools: ["doctor_write_probe"], sessionManager: SessionManager.inMemory(projectRoot), settingsManager, resourceLoader: loader });
@@ -180,7 +190,7 @@ async function captureCapabilityCheck(checks: DoctorCheck[], name: string, opera
 }
 
 function fromEvidence(evidence: CapabilityEvidence): DoctorCheck {
-  return { name: evidence.capability, status: evidence.passed ? "PASS" : "FAIL", testedUrl: evidence.endpoint, modelId: evidence.modelId, latencyMs: evidence.latencyMs, message: evidence.passed ? "Capability verified with correct output." : "Endpoint responded, but the answer did not prove the capability.", evidence: evidence.evidence, ...(evidence.passed ? {} : { suggestion: "Use a different installed local model or adjust its compatible provider settings." }) };
+  return { name: evidence.capability, status: evidence.passed ? "PASS" : "FAIL", testedUrl: evidence.endpoint, modelId: evidence.modelId, latencyMs: evidence.latencyMs, message: evidence.passed ? "Capability verified with correct output." : "Endpoint responded, but the answer did not prove the capability.", evidence: evidence.evidence, ...(evidence.passed ? {} : { suggestion: "Use a different model or adjust its compatible provider settings." }) };
 }
 
 function failed(name: string, error: unknown, meta: { testedUrl?: string; modelId?: string; started?: number; suggestion?: string }): DoctorCheck {
@@ -190,3 +200,9 @@ function failed(name: string, error: unknown, meta: { testedUrl?: string; modelI
 }
 
 function elapsed(started: number): number { return Math.round(performance.now() - started); }
+
+function doctorThinkingLevelMap(provider: "local-ollama" | "groq", modelId: string): Record<string, string> {
+  return provider === "groq" && modelId.startsWith("openai/gpt-oss-")
+    ? { off: "low", minimal: "low", low: "low", medium: "medium", high: "high" }
+    : { off: "none", minimal: "low", low: "low", medium: "medium", high: "high" };
+}

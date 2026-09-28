@@ -1,6 +1,6 @@
 import type { AppConfig } from "../config/schema.js";
 import { deadlineSignal } from "../utils/abort.js";
-import { UiAgentError } from "../utils/errors.js";
+import { safeError, UiAgentError } from "../utils/errors.js";
 import { authHeaders, ensureTrailingSlash } from "./discovery.js";
 import type { ChatMessage, ChatTool } from "./types.js";
 
@@ -38,7 +38,7 @@ export class LocalOpenAiClient {
       stream: false,
       max_tokens: request.maxTokens ?? this.config.model.maxOutputTokens,
       temperature: request.temperature ?? this.config.model.temperature,
-      reasoning_effort: mapThinking(this.config.model.thinking)
+      reasoning_effort: mapThinking(this.config.model.thinking, request.model, this.config)
     };
     if (request.tools) body.tools = request.tools;
     if (request.toolChoice) body.tool_choice = request.toolChoice;
@@ -55,9 +55,9 @@ export class LocalOpenAiClient {
           signal: attemptSignal
         });
         if (!response.ok) {
-          const message = (await response.text()).slice(0, 1_000);
-          if (response.status < 500 && response.status !== 429) throw new UiAgentError("PROCESS_FAILED", `Model request failed with HTTP ${response.status}: ${message}`);
-          throw new Error(`HTTP ${response.status}: ${message}`);
+          const summary = providerErrorSummary((await response.text()).slice(0, 1_000));
+          if (response.status < 500 && response.status !== 429) throw new UiAgentError("PROCESS_FAILED", `Model request failed with HTTP ${response.status}${summary}.`);
+          throw new RetryableModelError(`HTTP ${response.status}${summary}`, response.status === 429 ? retryAfterMs(response.headers.get("retry-after")) : undefined);
         }
         const raw = await response.json() as any;
         const choice = raw.choices?.[0];
@@ -79,12 +79,13 @@ export class LocalOpenAiClient {
       } catch (error) {
         lastError = attemptSignal.aborted && !request.signal?.aborted ? attemptSignal.reason : error;
         if (request.signal?.aborted || error instanceof UiAgentError || attempt >= this.config.model.retry.maxAttempts) break;
-        await new Promise((resolve) => setTimeout(resolve, this.config.model.retry.baseDelayMs * attempt));
+        const retryDelayMs = error instanceof RetryableModelError && error.retryAfterMs !== undefined ? error.retryAfterMs : this.config.model.retry.baseDelayMs * attempt;
+        await new Promise((resolve) => setTimeout(resolve, Math.min(retryDelayMs, 60_000)));
       }
     }
     if (request.signal?.aborted) throw new UiAgentError("ABORTED", "Model request cancelled.", { cause: lastError });
-    if (lastError instanceof UiAgentError && lastError.code === "TIMEOUT") throw lastError;
-    throw new UiAgentError("PROCESS_FAILED", "Local model request failed after retries.", { cause: lastError, suggestion: `Check ${endpoint} and the configured timeout.` });
+    if (lastError instanceof UiAgentError) throw lastError;
+    throw new UiAgentError("PROCESS_FAILED", `Model request failed after retries: ${safeError(lastError).message}`, { cause: lastError, suggestion: `Check ${endpoint} and the configured timeout.` });
   }
 }
 
@@ -108,6 +109,32 @@ function validateImageAttachments(messages: ChatMessage[], config: AppConfig): v
   }
 }
 
-function mapThinking(level: AppConfig["model"]["thinking"]): string {
+function mapThinking(level: AppConfig["model"]["thinking"], modelId: string, config: AppConfig): string {
+  if (config.model.provider === "groq" && modelId.startsWith("openai/gpt-oss-")) return level === "medium" || level === "high" ? level : "low";
   return level === "off" ? "none" : level;
+}
+
+class RetryableModelError extends Error {
+  constructor(message: string, readonly retryAfterMs?: number) {
+    super(message);
+    this.name = "RetryableModelError";
+  }
+}
+
+function retryAfterMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined;
+}
+
+function providerErrorSummary(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: { code?: unknown; type?: unknown } };
+    const value = typeof parsed.error?.code === "string" ? parsed.error.code : typeof parsed.error?.type === "string" ? parsed.error.type : undefined;
+    return value && /^[a-z0-9_.-]{1,80}$/i.test(value) ? ` (${value})` : "";
+  } catch {
+    return "";
+  }
 }

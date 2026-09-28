@@ -14,8 +14,10 @@ export const appConfigSchema = z.object({
   schemaVersion: z.literal(1),
   interaction: interactionLevelSchema.default("high"),
   model: z.object({
+    provider: z.enum(["auto", "local", "groq"]).default("auto"),
     discoveryUrl: z.string().url().default("http://127.0.0.1:18080/api/tags"),
     inferenceBaseUrl: z.string().url().default("http://127.0.0.1:18080/v1"),
+    localProbeTimeoutMs: z.number().int().min(250).max(30_000).default(3_000),
     protocol: z.enum(["openai-completions", "ollama-native"]).default("openai-completions"),
     codingModelId: z.string().min(1).optional(),
     visualModelId: z.string().min(1).optional(),
@@ -33,7 +35,18 @@ export const appConfigSchema = z.object({
     auth: z.object({
       headerName: z.string().min(1).optional(),
       environmentVariable: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).optional()
-    }).default({})
+    }).default({}),
+    groq: z.object({
+      apiKeyEnvironmentVariable: z.string().regex(/^[A-Z_][A-Z0-9_]*$/).default("GROQ_API_KEY"),
+      codingModelId: z.string().min(1).default("openai/gpt-oss-20b"),
+      visualModelId: z.string().min(1).optional().default("qwen/qwen3.8-27b"),
+      contextWindow: z.number().int().positive().max(2_000_000).default(131_072)
+    }).default({
+      apiKeyEnvironmentVariable: "GROQ_API_KEY",
+      codingModelId: "openai/gpt-oss-20b",
+      visualModelId: "qwen/qwen3.8-27b",
+      contextWindow: 131_072
+    })
   }),
   workflow: z.object({
     maxRepairRounds: z.number().int().min(0).max(20).default(3),

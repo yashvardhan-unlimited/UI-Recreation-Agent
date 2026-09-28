@@ -1,4 +1,6 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
 import path from "node:path";
 import { appConfigSchema, defaultConfig, type AppConfig, type InteractionLevel } from "./schema.js";
 
@@ -7,6 +9,7 @@ export function defaultConfigPath(cwd = process.cwd()): string {
 }
 
 export async function loadConfig(configPath = defaultConfigPath()): Promise<AppConfig> {
+  loadProjectEnv(process.cwd());
   let parsed: unknown = {};
   try {
     parsed = JSON.parse(await readFile(configPath, "utf8"));
@@ -15,6 +18,22 @@ export async function loadConfig(configPath = defaultConfigPath()): Promise<AppC
   }
   const candidate = deepMerge(defaultConfig, parsed);
   return appConfigSchema.parse(candidate);
+}
+
+export function loadProjectEnv(workspaceRoot: string): boolean {
+  let current = path.resolve(workspaceRoot);
+  while (true) {
+    try {
+      loadEnvFile(path.join(current, ".env"));
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (existsSync(path.join(current, ".git"))) return false;
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
 }
 
 export async function saveConfig(config: AppConfig, configPath = defaultConfigPath()): Promise<void> {

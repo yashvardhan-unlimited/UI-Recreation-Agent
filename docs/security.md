@@ -2,7 +2,7 @@
 
 ## Protected boundaries
 
-- Model URLs are restricted to loopback hosts. The harness never opens a public listener for inference.
+- Local model URLs are restricted to loopback hosts. The optional Groq fallback is restricted to the exact official `https://api.groq.com/openai/v1` base, uses `GROQ_API_KEY` from the process environment, and cannot be configured to send that bearer token to another host. The harness never opens a public listener for inference.
 - Project tools canonicalize paths, reject traversal/symlink escape, block `.git`, `.env*`, SSH keys, npm credentials, Pi auth, binary reads, oversized reads/writes, and stale optimistic hashes.
 - Generated apps receive a scrubbed environment without model keys, home-directory variables, SSH agents, cloud/cluster credentials, or container/runtime sockets.
 - Preview processes use a project cwd, bounded stdout/stderr, readiness deadlines, and process-tree termination on cancellation/failure/shutdown.
@@ -10,6 +10,11 @@
 - Reference methods are GET/HEAD only; popups, sensitive/destructive controls, password fields, Enter submission, and unexpected top-level navigation are blocked and recorded.
 - Image downloads require an exact recorded approval, an accepted known license, a permitted redirect host, raster MIME, safe decoded dimensions, and no watermark flag. Final projects use local files, never search thumbnails/hotlinks.
 - Error/log output redacts common secret fields, bearer values, and base64 image payloads.
+- `.env` files are ignored by Git, API-key values are never written to config/run/doctor artifacts, and generated preview/build processes do not inherit model credentials.
+
+## Remote inference boundary
+
+When Groq fallback is active, prompts, tool schemas/results, and any attached screenshots are transmitted to Groq for inference. Set `model.provider` to `local` when project content must remain on-device. Consult your Groq account's data-handling terms before using confidential material.
 
 ## Honest limitation
 

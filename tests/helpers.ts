@@ -4,7 +4,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     ...structuredClone(defaultConfig),
     ...overrides,
-    model: { ...defaultConfig.model, ...(overrides.model ?? {}), retry: { ...defaultConfig.model.retry, ...(overrides.model?.retry ?? {}) } },
+    model: { ...defaultConfig.model, ...(overrides.model ?? {}), retry: { ...defaultConfig.model.retry, ...(overrides.model?.retry ?? {}) }, groq: { ...defaultConfig.model.groq, ...(overrides.model?.groq ?? {}) } },
     workflow: { ...defaultConfig.workflow, ...(overrides.workflow ?? {}) },
     browser: { ...defaultConfig.browser, ...(overrides.browser ?? {}), screenshot: { ...defaultConfig.browser.screenshot, ...(overrides.browser?.screenshot ?? {}) } },
     quality: { ...defaultConfig.quality, ...(overrides.quality ?? {}), lighthouse: { ...defaultConfig.quality.lighthouse, ...(overrides.quality?.lighthouse ?? {}) } },

@@ -2,8 +2,10 @@
   "schemaVersion": 1,
   "interaction": "high",
   "model": {
+    "provider": "auto",
     "discoveryUrl": "http://127.0.0.1:18080/api/tags",
     "inferenceBaseUrl": "http://127.0.0.1:18080/v1",
+    "localProbeTimeoutMs": 3000,
     "protocol": "openai-completions",
     "codingModelId": "qwen3.8:27b",
     "visualModelId": "qwen3.8:27b",
@@ -15,7 +17,13 @@
     "temperature": 0.2,
     "maxAttachedImages": 2,
     "maxImageBytes": 8388608,
-    "auth": {}
+    "auth": {},
+    "groq": {
+      "apiKeyEnvironmentVariable": "GROQ_API_KEY",
+      "codingModelId": "openai/gpt-oss-20b",
+      "visualModelId": "qwen/qwen3.8-27b",
+      "contextWindow": 131072
+    }
   },
   "workflow": {
     "maxRepairRounds": 3,

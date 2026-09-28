@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { doctorMatchesConfig, verifiedVisualModel } from "../../src/model/doctor-cache.js";
 import type { DoctorReport } from "../../src/doctor.js";
+import { GROQ_BASE_URL } from "../../src/model/discovery.js";
 import { testConfig } from "../helpers.js";
 
 function report(createdAt = new Date().toISOString()): DoctorReport {
@@ -21,6 +22,17 @@ describe("doctor capability gating", () => {
     expect(doctorMatchesConfig(report(), testConfig(), "qwen3.8:27b")).toBe(true);
     expect(doctorMatchesConfig(report("2020-01-01T00:00:00.000Z"), testConfig(), "qwen3.8:27b")).toBe(false);
     expect(doctorMatchesConfig(report(), testConfig({ model: { ...testConfig().model, inferenceBaseUrl: "http://127.0.0.1:18080/other/v1" } }), "qwen3.8:27b")).toBe(false);
+  });
+
+  it("binds a doctor report to the selected provider", () => {
+    const groq = report();
+    groq.selectedProvider = "groq";
+    groq.selectedCodingModel = "qwen/qwen3.8-27b";
+    groq.checks.find((check) => check.name === "discovery")!.testedUrl = `${GROQ_BASE_URL}/models`;
+    groq.checks.find((check) => check.name === "inference_endpoint")!.testedUrl = `${GROQ_BASE_URL}/models`;
+    const config = testConfig({ model: { ...testConfig().model, provider: "groq", discoveryUrl: `${GROQ_BASE_URL}/models`, inferenceBaseUrl: GROQ_BASE_URL, codingModelId: "qwen/qwen3.8-27b" } });
+    expect(doctorMatchesConfig(groq, config, "qwen/qwen3.8-27b", "groq")).toBe(true);
+    expect(doctorMatchesConfig(groq, config, "qwen/qwen3.8-27b", "local-ollama")).toBe(false);
   });
 
   it("unlocks visual work only when both image checks pass for the same exact model", () => {

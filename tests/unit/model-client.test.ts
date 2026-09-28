@@ -21,6 +21,27 @@ describe("model request resilience", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("honors Retry-After for rate limits", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("rate limited", { status: 429, headers: { "retry-after": "0" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "qwen3.8:27b", choices: [{ finish_reason: "stop", message: { content: "ok" } }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = testConfig({ model: { ...testConfig().model, retry: { maxAttempts: 2, baseDelayMs: 10_000 } } });
+    await expect(new LocalOpenAiClient(config).chat({ model: "qwen3.8:27b", messages: [{ role: "user", content: "test" }] })).resolves.toMatchObject({ content: "ok" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("maps Groq GPT-OSS off mode to its lowest supported reasoning effort", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ model: "openai/gpt-oss-20b", choices: [{ finish_reason: "stop", message: { content: "ok" } }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const base = testConfig();
+    const config = testConfig({ model: { ...base.model, provider: "groq", inferenceBaseUrl: "https://api.groq.com/openai/v1" } });
+    await new LocalOpenAiClient(config).chat({ model: "openai/gpt-oss-20b", messages: [{ role: "user", content: "test" }] });
+    const request = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(typeof request.body).toBe("string");
+    expect(JSON.parse(request.body as string)).toMatchObject({ reasoning_effort: "low" });
+  });
+
   it("honors caller cancellation without retrying", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn().mockImplementation(async (_url, init: RequestInit) => new Promise((_resolve, reject) => {
@@ -35,6 +56,14 @@ describe("model request resilience", () => {
   it("reports malformed model envelopes", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 200 })));
     await expect(new LocalOpenAiClient(testConfig({ model: { ...testConfig().model, retry: { maxAttempts: 1, baseDelayMs: 0 } } })).chat({ model: "qwen3.8:27b", messages: [{ role: "user", content: "test" }] })).rejects.toMatchObject({ code: "PROCESS_FAILED" });
+  });
+
+  it("preserves bounded non-retryable provider errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "sensitive provider detail", type: "invalid_request_error", code: "unsupported_image" } }), { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = new LocalOpenAiClient(testConfig({ model: { ...testConfig().model, retry: { maxAttempts: 2, baseDelayMs: 0 } } })).chat({ model: "qwen3.8:27b", messages: [{ role: "user", content: "test" }] });
+    await expect(request).rejects.toMatchObject({ code: "PROCESS_FAILED", message: "Model request failed with HTTP 400 (unsupported_image)." });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("reports request timeouts distinctly after the configured retry budget", async () => {

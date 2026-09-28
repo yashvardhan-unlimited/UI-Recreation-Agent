@@ -40,6 +40,7 @@ export interface PiHarness {
 
 export async function createPiHarness(input: {
   config: AppConfig;
+  provider: "local-ollama" | "groq";
   model: OllamaModel;
   visualModelId?: string;
   run: RunManifest;
@@ -59,10 +60,12 @@ export async function createPiHarness(input: {
   await mkdir(agentDir, { recursive: true });
   await mkdir(sessionDir, { recursive: true });
   const modelRuntime = await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false, refreshOnCreate: false });
-  modelRuntime.registerProvider("local-ollama", {
-    name: "Local Ollama-compatible server",
+  const providerId = input.provider;
+  const runtimeKey = input.config.model.auth.environmentVariable ? process.env[input.config.model.auth.environmentVariable] ?? "" : "local-loopback";
+  modelRuntime.registerProvider(providerId, {
+    name: input.provider === "groq" ? "Groq API" : "Local Ollama-compatible server",
     baseUrl: input.config.model.inferenceBaseUrl,
-    apiKey: "local-loopback",
+    apiKey: runtimeKey,
     authHeader: false,
     headers: authHeaders(input.config),
     api: "openai-completions",
@@ -70,7 +73,7 @@ export async function createPiHarness(input: {
       id: input.model.name,
       name: input.model.name,
       reasoning: input.model.capabilities.includes("thinking"),
-      thinkingLevelMap: { off: "none", minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "high", max: "high" },
+      thinkingLevelMap: groqThinkingLevelMap(input.provider, input.model.name),
       input: input.visualModelId === input.model.name ? ["text", "image"] : ["text"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: input.model.details.context_length ?? input.config.model.contextWindow,
@@ -87,11 +90,11 @@ export async function createPiHarness(input: {
       }
     }]
   });
-  await modelRuntime.setRuntimeApiKey("local-ollama", "local-loopback");
-  const model = modelRuntime.getModel("local-ollama", input.model.name);
+  await modelRuntime.setRuntimeApiKey(providerId, runtimeKey);
+  const model = modelRuntime.getModel(providerId, input.model.name);
   if (!model) throw new Error(`Pi could not register discovered model ${input.model.name}.`);
   const settingsManager = SettingsManager.inMemory({
-    defaultProvider: "local-ollama",
+    defaultProvider: providerId,
     defaultModel: input.model.name,
     defaultThinkingLevel: input.config.model.thinking,
     defaultProjectTrust: "never",
@@ -131,6 +134,12 @@ export async function createPiHarness(input: {
     run: input.run,
     async dispose() { await runtime.dispose(); await preview.cleanup(); await browser.close(); }
   };
+}
+
+function groqThinkingLevelMap(provider: "local-ollama" | "groq", modelId: string): Record<string, string> {
+  return provider === "groq" && modelId.startsWith("openai/gpt-oss-")
+    ? { off: "low", minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "high", max: "high" }
+    : { off: "none", minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "high", max: "high" };
 }
 
 export async function runInteractiveHarness(harness: PiHarness, initialMessage: string): Promise<void> {

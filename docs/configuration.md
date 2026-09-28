@@ -4,12 +4,24 @@ Configuration is a versioned JSON document validated by `src/config/schema.ts`. 
 
 ## Model
 
+- `provider`: `auto` (default) tries local inference first and then Groq, `local` disables remote fallback, and `groq` skips the local probe.
 - `discoveryUrl`: Ollama list endpoint; loopback-only.
 - `inferenceBaseUrl`: OpenAI-compatible base, normally `http://127.0.0.1:18080/v1`; loopback-only.
 - `codingModelId` and `visualModelId`: exact IDs that must be present in discovery.
+- `localProbeTimeoutMs`: maximum time spent deciding whether to fall back when `provider` is `auto`.
+- `groq`: names the API-key environment variable, exact coding/visual model IDs, and Groq context window. The remote base is intentionally pinned to `https://api.groq.com/openai/v1` so a configuration change cannot redirect the bearer token to another host.
+- The Groq defaults deliberately use `openai/gpt-oss-20b` for coding/tool work and `qwen/qwen3.8-27b` for vision. Keeping them separate matches their supported modalities and avoids placing the full doctor matrix in one model's rate-limit bucket.
 - `protocol`: `openai-completions` is implemented for Pi; `ollama-native` is reserved for adapter fallback and is not used by the current Pi session.
 - `contextWindow`, `maxOutputTokens`, request timeout, retry policy, thinking level, sampling temperature, attachment count/bytes, screenshot dimensions/count, and asset width/height/pixel limits are explicit.
-- Optional auth reads one named environment variable and never serializes or logs its value.
+- Optional auth reads one named environment variable and never serializes or logs its value. At startup, the CLI loads the nearest `.env`, starting in the working project and walking upward through parent directories until the nearest Git boundary. This lets projects nested under the UI Agent repository reuse its ignored `.env` without copying secrets. The search never crosses a nested repository boundary, and an already exported environment variable takes precedence.
+
+For automatic fallback, copy `.env.example` to `.env` and set:
+
+```dotenv
+GROQ_API_KEY=gsk_your_real_key
+```
+
+Both files are covered deliberately: `.env` is ignored by Git, while `.env.example` is safe to commit. Preview/build child processes use an allowlist and do not inherit `GROQ_API_KEY`.
 
 Run `ui-agent doctor` after every endpoint/model change. Capability flags returned by `/api/tags` are informational only.
 

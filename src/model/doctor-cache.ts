@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { DoctorReport } from "../doctor.js";
 import type { AppConfig } from "../config/schema.js";
-import { ensureTrailingSlash } from "./discovery.js";
+import { modelsEndpoint } from "./discovery.js";
 
 export async function loadLatestDoctorReport(workspaceRoot: string): Promise<DoctorReport | undefined> {
   try {
@@ -21,10 +21,11 @@ export function verifiedVisualModel(report: DoctorReport | undefined, candidateI
   return hasPassingCheck(report, "vision_single", candidateId) && hasPassingCheck(report, "vision_compare", candidateId) ? candidateId : undefined;
 }
 
-export function doctorMatchesConfig(report: DoctorReport | undefined, config: AppConfig, codingModelId: string, maximumAgeMs = 24 * 60 * 60_000): boolean {
+export function doctorMatchesConfig(report: DoctorReport | undefined, config: AppConfig, codingModelId: string, provider: "local-ollama" | "groq" = "local-ollama", maximumAgeMs = 24 * 60 * 60_000): boolean {
   if (!report || report.selectedCodingModel !== codingModelId) return false;
+  if ((report.selectedProvider ?? "local-ollama") !== provider) return false;
   if (Date.now() - Date.parse(report.createdAt) > maximumAgeMs) return false;
   const discovery = report.checks.find((check) => check.name === "discovery" && check.status === "PASS");
   const inference = report.checks.find((check) => check.name === "inference_endpoint" && check.status === "PASS");
-  return discovery?.testedUrl === config.model.discoveryUrl && inference?.testedUrl === new URL("models", ensureTrailingSlash(config.model.inferenceBaseUrl)).toString();
+  return discovery?.testedUrl === config.model.discoveryUrl && inference?.testedUrl === modelsEndpoint(config);
 }

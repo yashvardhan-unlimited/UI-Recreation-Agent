@@ -16,7 +16,7 @@ flowchart LR
   X --> F[Project files and checkpoints]
   X --> V[Preview process]
   X --> B[Restricted Playwright]
-  X --> M[Verified local Ollama-compatible model]
+  X --> M[Verified active model<br/>local or Groq]
   V --> B
   B --> A[Screenshots and browser evidence]
   A --> M
@@ -29,8 +29,9 @@ flowchart LR
 flowchart TD
   CLI[Commander CLI] --> CFG[Zod config v1]
   CLI --> DOC[Capability doctor]
-  DOC --> TAGS[GET loopback /api/tags]
-  DOC --> MODELS[GET loopback /v1/models]
+  DOC --> ROUTE[Local-first backend selection]
+  ROUTE --> TAGS[GET loopback /api/tags + /v1/models]
+  ROUTE -->|local unavailable + key present| GROQ[GET Groq /openai/v1/models]
   DOC --> CAPS[Text · JSON · tools · Pi continuation · 1/2 image]
   DOC --> BROW[Chromium/runtime/port/screenshot]
   CAPS --> DCACHE[doctor/latest.json]
@@ -42,6 +43,7 @@ flowchart TD
 
   CLI --> MRT[Pi ModelRuntime]
   MRT --> LOCAL[local-ollama provider<br/>openai-completions]
+  MRT --> GROQP[groq provider<br/>openai-completions]
   CLI --> ASR[AgentSessionRuntime]
   ASR --> SESSION[Persistent AgentSession]
   SESSION --> EXT[Inline ui-agent Pi extension]
@@ -92,7 +94,7 @@ Terminal statuses are `ready_for_review`, `needs_work`, `blocked`, `failed`, and
 
 ## Pi integration details
 
-- `ModelRuntime.registerProvider()` registers a loopback-only `openai-completions` provider after exact Ollama discovery.
+- `ModelRuntime.registerProvider()` registers the selected `openai-completions` provider after exact model discovery. `auto` prefers loopback inference; if that probe fails and `GROQ_API_KEY` is available, it uses the pinned official Groq endpoint.
 - `createAgentSessionServices()` and `createAgentSessionFromServices()` construct cwd-bound services and the persistent session.
 - `createAgentSessionRuntime()` supports session replacement/resume, while `InteractiveMode` supplies Pi's real TUI.
 - An inline extension registers every project/browser/human tool and commands such as `/ui-status`, `/ui-direction`, `/ui-brief`, and `/ui-decisions`.
@@ -106,6 +108,6 @@ Tools use TypeBox parameter schemas and return structured details plus bounded h
 ## Trade-offs
 
 - A single session makes decisions and evidence coherent and resumable, at the cost of requiring disciplined compaction.
-- OpenAI compatibility is simpler than a native Ollama provider in the installed Pi version and was proven available at `/v1`; `reasoning_effort: none` is essential for short output budgets on this model.
+- OpenAI compatibility provides one bounded client path for both local inference and Groq; provider, endpoint, and model ID are bound into doctor evidence before a workflow can start.
 - Pixel metrics locate changes but never become a fabricated “accuracy score.” Visual judgment stays structured and cannot override deterministic gates.
 - Local-process isolation works on this Windows host without Docker, but it is not safe for hostile untrusted code. See [security.md](security.md).

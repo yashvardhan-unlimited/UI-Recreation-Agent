@@ -2,6 +2,16 @@
 
 Date: 2026-09-17 (Asia/Calcutta)
 
+## Update: 2026-09-24 Groq fallback
+
+- Added `auto`, `local`, and `groq` provider selection. `auto` preserves local-first behavior and falls back only after the loopback discovery/inference probe fails.
+- Added optional workspace `.env` loading through Node's native dotenv support. Groq authentication reads `GROQ_API_KEY` (or the configured environment-variable name); the value is not serialized, logged, or inherited by preview/build child processes.
+- Groq traffic is restricted to the exact official `https://api.groq.com/openai/v1` base. The configured coding and visual IDs must be returned by `/models` before use.
+- Current deterministic result: 15 test files / 44 tests pass, including local preference, fallback on both discovery and inference-endpoint errors, authenticated Groq fallback, nearest-ancestor dotenv loading with repository-boundary protection, missing-key diagnostics, credential-host pinning, provider-bound doctor caching, `Retry-After` handling, Groq reasoning-level compatibility, and child-process secret isolation.
+- Typecheck, lint, production build, dependency audit (0 vulnerabilities), and the generated-project acceptance test pass. The acceptance run reports 1 pass and 4 conditional live-model skips.
+- A real Groq doctor passes with `openai/gpt-oss-20b` for text, strict JSON, direct tools, and the Pi tool/file continuation, plus `qwen/qwen3.8-27b` for genuine one-image understanding and two-image comparison. Runtime/port and Chromium screenshot checks also pass. Evidence: `.ui-agent/doctor/2026-09-24T08-07-37-441Z/doctor-report.json`.
+- `UI_AGENT_LIVE_MODEL=1 npm run test:live` passes (1 test). The longer full create/repair/recreation live-E2E suite was not run and is not claimed as passed.
+
 ## Passed
 
 - Repository/environment inspection: empty starting workspace, no Git repository or applicable `AGENTS.md`, Node 24.14.0, npm, Git, Chrome, Edge, and Playwright browser files present; Docker/Podman absent.

@@ -23,7 +23,7 @@ The deterministic implementation and browser vertical slice are working:
 - A real end-to-end scaffold test creates a React application, installs locked dependencies with lifecycle scripts disabled, builds it, runs its generated Playwright test, starts a production preview, exercises it in Chromium, audits desktop and mobile layouts, captures screenshots, and cleans up its process tree.
 - Browser/runtime portions of the capability doctor pass.
 
-The local model server was online during initial discovery but stopped listening before the completed capability matrix was run. Therefore Pi tool continuation, genuine image understanding, two-image comparison, and the full model-driven repair demonstrations remain blocked rather than claimed as successful. The authoritative status is maintained in [`docs/validation-report.md`](docs/validation-report.md).
+The local model server was online during initial discovery but stopped listening before the completed capability matrix was run. The harness now has a local-first Groq fallback, but a real Groq capability matrix still requires a valid workspace `GROQ_API_KEY`. Therefore Pi tool continuation, genuine image understanding, two-image comparison, and the full model-driven repair demonstrations remain blocked rather than claimed as successful. The authoritative status is maintained in [`docs/validation-report.md`](docs/validation-report.md).
 
 ## 3. System architecture
 
@@ -53,15 +53,15 @@ A single session keeps the approved brief, implementation reasoning, browser evi
 
 ### Why OpenAI compatibility
 
-The installed Pi version exposes a documented custom provider path compatible with OpenAI chat/completions semantics. The server supported `http://127.0.0.1:18080/v1`, so the project registers a loopback-only `openai-completions` provider with Pi's `ModelRuntime`.
+The installed Pi version exposes a documented custom provider path compatible with OpenAI chat/completions semantics. The same bounded adapter supports the loopback endpoint and Groq's OpenAI-compatible API. In `auto` mode, local discovery is attempted first; when it is unavailable and `GROQ_API_KEY` exists, the runtime registers a `groq` provider against the pinned official HTTPS base.
 
-`ollama-native` exists in the configuration schema as a reserved protocol value, but the current Pi session refuses it because the installed SDK does not expose a documented native Ollama agent provider. This refusal is intentional and actionable rather than silently routing to a hosted fallback.
+`ollama-native` exists in the configuration schema as a reserved protocol value, but the current Pi session refuses it because the installed SDK does not expose a documented native Ollama agent provider. Remote fallback is explicit through `model.provider=auto|groq`, uses an environment-only key, and is recorded in doctor/run provenance.
 
 ## 4. Model discovery and capability proof
 
 The agent never trusts a model name or an advertised capability by itself.
 
-The discovery sequence is:
+The local discovery sequence is:
 
 1. Call the configured `/api/tags` endpoint.
 2. Record exact installed IDs and metadata.
@@ -72,6 +72,8 @@ The discovery sequence is:
 7. Test structured JSON and bounded malformed-output recovery.
 8. Test a direct tool call and tool-result continuation.
 9. Test the same kind of safe file/tool round trip through a real Pi session.
+
+If local discovery or `/v1/models` fails in `auto` mode, the agent loads the optional workspace `.env`, requires `GROQ_API_KEY`, queries the pinned Groq `/models` endpoint, verifies the configured exact Groq IDs, and then runs the same capability probes. A key is never written into configuration, run manifests, doctor reports, or preview-process environments.
 10. Test genuine single-image understanding using a generated image with known text, colors, shapes, and positions.
 11. Test genuine two-image comparison.
 12. Test Node, npm, port allocation, Chromium launch, and screenshot output independently.
@@ -290,7 +292,7 @@ Large images, dependency trees, and repetitive logs stay in artifact files inste
 | --- | --- |
 | `src/cli.ts` | Commander CLI and command arguments. |
 | `src/config/` | Versioned Zod configuration and persistence. |
-| `src/model/` | Discovery, local inference, structured recovery, and doctor evidence. |
+| `src/model/` | Local/Groq selection, inference, structured recovery, and doctor evidence. |
 | `src/pi/` | Pi provider/session construction, tools, TUI views, and compaction. |
 | `src/state/` | Run manifest, approval policy, persistence, and workflow transitions. |
 | `src/tools/` | Safe filesystem, preview, browser, quality, visual, asset, and checkpoint implementations. |

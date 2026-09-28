@@ -12,10 +12,10 @@ import { consoleLogger } from "./utils/log.js";
 import { resumeWorkflow, startWorkflow } from "./workflows/orchestrator.js";
 
 const program = new Command();
-program.name("ui-agent").description("Local Pi-powered frontend creation, recreation, audit, and repair agent").version("0.1.0");
+program.name("ui-agent").description("Pi-powered frontend creation, recreation, audit, and repair agent").version("0.1.0");
 program.option("--config <path>", "configuration file (default: .ui-agent/config.json)");
 
-program.command("doctor").description("Verify local model, Pi, browser, runtime, and visual capabilities").option("--json", "print JSON report").action(async (options) => {
+program.command("doctor").description("Verify model backend, Pi, browser, runtime, and visual capabilities").option("--json", "print JSON report").action(async (options) => {
   const config = await configFor(program);
   const report = await runDoctor(config, process.cwd());
   if (options.json) console.log(JSON.stringify(report, null, 2)); else printDoctor(report);
@@ -79,7 +79,22 @@ configCommand.command("set").argument("<key>").argument("<value>").description("
     console.log(`model.visualModelId=${value}`);
     return;
   }
-  throw new Error("Supported keys: interaction, model, visual-model");
+  if (key === "provider") {
+    const config = await loadConfig(configPath);
+    const updated = appConfigSchema.parse({ ...config, model: { ...config.model, provider: value } });
+    await saveConfig(updated, configPath);
+    console.log(`model.provider=${value}`);
+    return;
+  }
+  if (key === "groq-model" || key === "groq-visual-model") {
+    const config = await loadConfig(configPath);
+    const field = key === "groq-model" ? "codingModelId" : "visualModelId";
+    const updated = appConfigSchema.parse({ ...config, model: { ...config.model, groq: { ...config.model.groq, [field]: value } } });
+    await saveConfig(updated, configPath);
+    console.log(`model.groq.${field}=${value}`);
+    return;
+  }
+  throw new Error("Supported keys: interaction, provider, model, visual-model, groq-model, groq-visual-model");
 });
 configCommand.command("show").option("--json").action(async () => console.log(JSON.stringify(await configFor(program), null, 2)));
 

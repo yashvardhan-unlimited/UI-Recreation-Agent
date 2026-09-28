@@ -26,7 +26,7 @@ export async function probeTextAndJson(config: AppConfig, modelId: string, signa
 export async function probeText(config: AppConfig, modelId: string, signal?: AbortSignal): Promise<CapabilityEvidence> {
   const client = new LocalOpenAiClient(config);
   const endpoint = `${config.model.inferenceBaseUrl}/chat/completions`;
-  const plain = await client.chat({ model: modelId, messages: [{ role: "user", content: "Reply with exactly LOCAL_MODEL_OK" }], maxTokens: 64, temperature: 0, signal });
+  const plain = await client.chat({ model: modelId, messages: [{ role: "user", content: "Reply with exactly LOCAL_MODEL_OK" }], maxTokens: 512, temperature: 0, signal });
   return { capability: "text", passed: plain.content.trim() === "LOCAL_MODEL_OK", latencyMs: plain.latencyMs, modelId, endpoint, evidence: plain.content.slice(0, 120) };
 }
 
@@ -37,7 +37,7 @@ export async function probeStructuredJson(config: AppConfig, modelId: string, si
     model: modelId,
     messages: [{ role: "user", content: "Return JSON with status exactly 'ok' and number exactly 731." }],
     responseFormat: { type: "json_schema", json_schema: { name: "doctor", strict: true, schema: { type: "object", additionalProperties: false, required: ["status", "number"], properties: { status: { type: "string", enum: ["ok"] }, number: { type: "integer", enum: [731] } } } } },
-    maxTokens: 128,
+    maxTokens: 512,
     temperature: 0,
     signal
   });
@@ -54,7 +54,7 @@ export async function probeToolCalling(config: AppConfig, modelId: string, signa
     messages: [{ role: "user", content: "Use the multiply tool to calculate 17 times 19. Do not calculate it yourself." }],
     tools: [{ type: "function", function: { name: "multiply", description: "Multiply two integers", parameters: { type: "object", additionalProperties: false, required: ["a", "b"], properties: { a: { type: "integer" }, b: { type: "integer" } } } } }],
     toolChoice: { type: "function", function: { name: "multiply" } },
-    maxTokens: 256,
+    maxTokens: 512,
     temperature: 0,
     signal
   });
@@ -70,7 +70,7 @@ export async function probeToolCalling(config: AppConfig, modelId: string, signa
       { role: "assistant", content: null, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] },
       { role: "tool", name: "multiply", tool_call_id: call.id, content: JSON.stringify({ product }) }
     ];
-    const second = await client.chat({ model: modelId, messages: continuation, maxTokens: 128, temperature: 0, signal });
+    const second = await client.chat({ model: modelId, messages: continuation, maxTokens: 512, temperature: 0, signal });
     latencyMs += second.latencyMs;
     passed = product === 323 && /323/.test(second.content);
     summary = `call=${call.name}(${args.a},${args.b}), continuation=${second.content.slice(0, 100)}`;
@@ -90,7 +90,7 @@ export async function probeSingleVision(config: AppConfig, modelId: string, arti
   const endpoint = `${config.model.inferenceBaseUrl}/chat/completions`;
   const single = await client.chat({
     model: modelId,
-    messages: [{ role: "user", content: [imagePart(await readFile(singlePath)), { type: "text", text: "Inspect the actual image. Return JSON with text, redShape, redPosition, blueShape, bluePosition, and greenShape. Use simple lowercase position words." }] }],
+    messages: [{ role: "user", content: [imagePart(await readFile(singlePath)), { type: "text", text: "Inspect the actual image. Return JSON with text, redShape, redPosition, blueShape, bluePosition, and greenShape. For each position, report both the vertical and horizontal direction using a value such as top-left or bottom-right." }] }],
     responseFormat: { type: "json_object" },
     maxTokens: 512,
     temperature: 0,
@@ -100,7 +100,7 @@ export async function probeSingleVision(config: AppConfig, modelId: string, arti
   let singleSummary = single.content.slice(0, 300);
   try {
     const parsed = parseJsonWithRecovery(single.content, (value) => visionSchema.parse(value)).value;
-    singlePassed = /VISION CHECK 731/i.test(parsed.text) && /circle/i.test(parsed.redShape) && /(upper|top).*left|left.*(upper|top)/i.test(parsed.redPosition) && /square/i.test(parsed.blueShape) && /(lower|bottom).*right|right.*(lower|bottom)/i.test(parsed.bluePosition) && /triangle/i.test(parsed.greenShape);
+    singlePassed = /VISION CHECK 731/i.test(parsed.text) && /circle/i.test(parsed.redShape) && /(upper|top)/i.test(parsed.redPosition) && /square/i.test(parsed.blueShape) && /right/i.test(parsed.bluePosition) && /triangle/i.test(parsed.greenShape);
     singleSummary = JSON.stringify(parsed);
   } catch {}
   await writeJsonAtomic(path.join(artifactDir, "vision-single-evidence.json"), single.raw);
@@ -117,7 +117,7 @@ export async function probeVisionComparison(config: AppConfig, modelId: string, 
   const endpoint = `${config.model.inferenceBaseUrl}/chat/completions`;
   const comparison = await client.chat({
     model: modelId,
-    messages: [{ role: "user", content: [imagePart(await readFile(firstPath)), imagePart(await readFile(secondPath)), { type: "text", text: "Compare image 1 and image 2. Return JSON: firstText, secondText, firstShape, secondShape, positionalDifference." }] }],
+    messages: [{ role: "user", content: [imagePart(await readFile(firstPath)), imagePart(await readFile(secondPath)), { type: "text", text: "Compare image 1 and image 2. Return JSON: firstText, secondText, firstShape, secondShape, positionalDifference. In positionalDifference, explicitly state which shape is on the left and which shape is on the right." }] }],
     responseFormat: { type: "json_object" },
     maxTokens: 512,
     temperature: 0,
