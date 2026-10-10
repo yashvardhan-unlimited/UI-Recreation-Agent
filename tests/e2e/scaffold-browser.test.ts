@@ -21,7 +21,6 @@ describe("generated React vertical slice", () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), "ui-agent-scaffold-e2e-"));
     const artifactRoot = path.join(projectRoot, ".artifacts");
     await applyUiPatch(projectRoot, reactViteScaffold());
-    await preview.createLockfile(projectRoot);
     await preview.install(projectRoot);
     await preview.build(projectRoot);
     const generatedTests = await preview.runScript(projectRoot, "test");

@@ -2,13 +2,13 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", ".ui-agent/**", "examples/generated/**", "eslint.config.js"] },
+  { ignores: ["dist/**", "node_modules/**", ".ui-agent/**", "examples/generated/**", "new-site/**", "kit/**", "test/fixtures/**", "evals/out/**", "test_folder_1/**", "eslint.config.js"] },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: { allowDefaultProject: ["bin/*.mjs"] },
         tsconfigRootDir: import.meta.dirname
       }
     },

@@ -9,3 +9,4 @@ examples/generated/
 .env
 .env.*
 !.env.example
+evals/out/

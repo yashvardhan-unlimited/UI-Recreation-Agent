@@ -25,7 +25,7 @@ import { authHeaders } from "../model/discovery.js";
 
 export const UI_TOOL_NAMES = [
   "inspect_project", "read_relevant_files", "scaffold_frontend", "apply_ui_patch", "manage_preview", "browser_inspect", "browser_interact",
-  "capture_screenshot", "analyze_reference", "compare_screenshots", "run_quality_checks", "checkpoint_project",
+  "capture_screenshot", "analyze_reference", "compare_screenshots", "review_screenshot", "run_quality_checks", "checkpoint_project",
   "list_assets", "search_images", "create_asset_contact_sheet", "download_approved_image", "register_supplied_asset", "record_design_spec", "record_defects",
   "advance_workflow", "ask_human", "approve_direction"
 ];
@@ -42,6 +42,7 @@ export async function createPiHarness(input: {
   config: AppConfig;
   provider: "local-ollama" | "groq";
   model: OllamaModel;
+  availableModels?: OllamaModel[];
   visualModelId?: string;
   run: RunManifest;
   runStore: RunStore;
@@ -69,26 +70,13 @@ export async function createPiHarness(input: {
     authHeader: false,
     headers: authHeaders(input.config),
     api: "openai-completions",
-    models: [{
-      id: input.model.name,
-      name: input.model.name,
-      reasoning: input.model.capabilities.includes("thinking"),
-      thinkingLevelMap: groqThinkingLevelMap(input.provider, input.model.name),
-      input: input.visualModelId === input.model.name ? ["text", "image"] : ["text"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: input.model.details.context_length ?? input.config.model.contextWindow,
-      maxTokens: input.config.model.maxOutputTokens,
-      samplingParams: { temperature: input.config.model.temperature },
-      compat: {
-        supportsStore: false,
-        supportsDeveloperRole: false,
-        supportsReasoningEffort: true,
-        supportsUsageInStreaming: true,
-        maxTokensField: "max_tokens",
-        thinkingFormat: "openai",
-        supportsStrictMode: false
-      }
-    }]
+    models: piModelCatalog({
+      config: input.config,
+      provider: input.provider,
+      defaultModel: input.model,
+      ...(input.availableModels ? { availableModels: input.availableModels } : {}),
+      ...(input.visualModelId ? { visualModelId: input.visualModelId } : {})
+    })
   });
   await modelRuntime.setRuntimeApiKey(providerId, runtimeKey);
   const model = modelRuntime.getModel(providerId, input.model.name);
@@ -140,6 +128,41 @@ function groqThinkingLevelMap(provider: "local-ollama" | "groq", modelId: string
   return provider === "groq" && modelId.startsWith("openai/gpt-oss-")
     ? { off: "low", minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "high", max: "high" }
     : { off: "none", minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "high", max: "high" };
+}
+
+export function piModelCatalog(input: { config: AppConfig; provider: "local-ollama" | "groq"; defaultModel: OllamaModel; availableModels?: OllamaModel[]; visualModelId?: string }): Array<{
+  id: string;
+  name: string;
+  reasoning: boolean;
+  thinkingLevelMap: Record<string, string>;
+  input: Array<"text" | "image">;
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  contextWindow: number;
+  maxTokens: number;
+  samplingParams: { temperature: number };
+  compat: { supportsStore: false; supportsDeveloperRole: false; supportsReasoningEffort: true; supportsUsageInStreaming: true; maxTokensField: "max_tokens"; thinkingFormat: "openai"; supportsStrictMode: false };
+}> {
+  const selectableModels = [...new Map([input.defaultModel, ...(input.availableModels ?? [])].map((candidate) => [candidate.name, candidate])).values()];
+  return selectableModels.map((candidate) => ({
+    id: candidate.name,
+    name: candidate.name,
+    reasoning: candidate.capabilities.includes("thinking"),
+    thinkingLevelMap: groqThinkingLevelMap(input.provider, candidate.name),
+    input: input.visualModelId === candidate.name ? ["text", "image"] : ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: candidate.details.context_length ?? input.config.model.contextWindow,
+    maxTokens: input.config.model.maxOutputTokens,
+    samplingParams: { temperature: input.config.model.temperature },
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: true,
+      supportsUsageInStreaming: true,
+      maxTokensField: "max_tokens",
+      thinkingFormat: "openai",
+      supportsStrictMode: false
+    }
+  }));
 }
 
 export async function runInteractiveHarness(harness: PiHarness, initialMessage: string): Promise<void> {

@@ -112,7 +112,7 @@ function groqModels(ids: string[], config: AppConfig): OllamaModel[] {
   if (missing.length > 0) {
     throw new UiAgentError("INVALID_INPUT", `Configured Groq model(s) are unavailable: ${missing.join(", ")}.`, { suggestion: "Choose exact IDs returned by the Groq /models endpoint." });
   }
-  return [...new Set(configured)].map((id) => ({
+  return [...new Set(ids)].map((id) => ({
     name: id,
     model: id,
     modified_at: "",

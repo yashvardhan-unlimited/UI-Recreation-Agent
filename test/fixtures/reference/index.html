@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Coffee</title>
+    <style>
+      body { margin: 0; font-family: Arial, sans-serif; color: #222222; background: #fafafa; }
+      h1, h2 { font-family: Georgia, serif; font-weight: 700; margin: 0 0 16px; }
+      h1 { font-size: 64px; line-height: 1.1; }
+      h2 { font-size: 40px; }
+      p { font-size: 18px; line-height: 1.6; }
+      section { padding: 96px 48px; }
+      .hero { background: #1d3557; color: #f1faee; min-height: 420px; }
+      .cta { display: inline-block; padding: 16px 32px; border-radius: 999px; background: #e63946; color: #ffffff; text-decoration: none; font-weight: 700; transition: background 0.15s, transform 0.15s; }
+      .cta:hover { background: #ffb703; color: #1d3557; transform: scale(1.08); }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+      .card { background: #ffffff; border-radius: 12px; padding: 24px; }
+      .quote { background: #a8dadc; }
+      .quote blockquote { margin: 0; font-family: Georgia, serif; font-size: 32px; }
+      .footer { background: #111111; color: #eeeeee; }
+      .reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.6s, transform 0.6s; }
+      .reveal.in { opacity: 1; transform: none; }
+      @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 40px; } section { padding: 64px 20px; } }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <main>
+        <section class="hero">
+          <h1>Northwind beans, roasted at dawn</h1>
+          <p>Single-origin coffee from the Northwind roastery, shipped the morning it leaves the drum.</p>
+          <a class="cta" href="#join">Join Northwind Club</a>
+        </section>
+        <section class="features">
+          <h2 class="reveal">Why Northwind</h2>
+          <div class="grid">
+            <div class="card reveal"><h3>Traceable</h3><p>Every bag names its farm and harvest.</p></div>
+            <div class="card reveal"><h3>Fresh</h3><p>Roasted to order, never warehoused.</p></div>
+            <div class="card reveal"><h3>Fair</h3><p>Prices agreed before the harvest.</p></div>
+          </div>
+        </section>
+        <section class="quote">
+          <blockquote class="reveal">"The only beans I buy now." — a Northwind regular</blockquote>
+        </section>
+        <section class="footer" id="join">
+          <h2>Northwind Club</h2>
+          <p>Two bags a month, cancel any time.</p>
+        </section>
+      </main>
+    </div>
+    <script>
+      const io = new IntersectionObserver((entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("in")), { threshold: 0.1 });
+      document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+    </script>
+  </body>
+</html>

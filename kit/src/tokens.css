@@ -1,0 +1,12 @@
+@theme static {
+  --color-*: initial;
+  --color-bg: #f6f3ee;
+  --color-fg: #1b1a17;
+  --color-muted: #625d55;
+  --color-surface: #ebe5db;
+  --color-accent: #b4400f;
+  --color-line: #d6cec1;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --radius-card: 1rem;
+}

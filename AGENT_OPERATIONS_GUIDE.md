@@ -1,316 +1,234 @@
-# Local UI Agent: Simple Operations Guide
+# UI Agent: Operations Guide
 
-Local UI Agent is meant to feel like a normal coding agent. Most users should set it up once, run the doctor once, and then describe the work they want.
-
-You do **not** need to run the repository test suite, inspect model endpoints manually, or edit JSON configuration for ordinary use. Those are maintainer and troubleshooting tasks.
+This guide is for using the UI Agent day to day: setting it up, asking for websites, reading what it reports, and fixing common problems. For how it is designed, see [ARCHITECTURE.md](ARCHITECTURE.md); for a short overview, see [README.md](README.md).
 
 ## The short version
 
-One-time setup:
+1. One-time: install the agent and its site kit, and the browser it uses for checks.
+2. Once: make the `uagent` command available.
+3. Type `uagent` in the folder where the site should live, and ask for what you want.
+
+## 1. One-time setup
+
+You need Node.js 22.19 or newer (`node -v`) and access to the model server at `http://127.0.0.1:18080`.
 
 ```powershell
 cd D:\PS2
-npm install --ignore-scripts
+npm install
+cd kit
+npm install        # the site template; every generated site links to this install
+cd ..
 npx playwright install chromium
-Copy-Item .env.example .env
-notepad .env
-npm run build
-npm link
-ui-agent config set provider auto
-ui-agent config set interaction balanced
-ui-agent doctor
 ```
 
-Put your Groq key in `.env`:
-
-```dotenv
-GROQ_API_KEY=gsk_your_key_here
-```
-
-Daily use from a project directory:
+Check that the model server answers:
 
 ```powershell
-ui-agent improve --project . --brief "Improve this interface and fix responsive and accessibility problems"
+Invoke-RestMethod http://127.0.0.1:18080/api/tags | Select-Object -ExpandProperty models | Select-Object name
 ```
 
-That is the normal workflow. `provider auto` tries the configured local endpoint first and automatically uses Groq if local discovery or inference is unavailable.
+You should see `qwen3.8:27b` and `qwen3-coder:30b` in the list. If you add or rename models on the server, see "Changing models" below.
 
-## Everyday commands
+## 2. Make the `uagent` command available
 
-### Work on the current project
+`uagent` starts pi with the UI Agent loaded and the models on `http://127.0.0.1:18080` already chosen (table below), so you don't have to set anything else. Install it once, from the agent's folder:
 
-```powershell
-ui-agent improve --project . --brief "Add a polished settings page and verify it on mobile"
-```
-
-### Create a new project
-
-Run this from the directory that should contain the new project:
-
-```powershell
-ui-agent create --out .\new-site --brief "Create a responsive robotics landing page for engineering leaders"
-```
-
-The output directory must be empty.
-
-### Audit without requesting a redesign
-
-```powershell
-ui-agent audit --project .
-```
-
-Add a focus when useful:
-
-```powershell
-ui-agent audit --project . --brief "Focus on mobile overflow, keyboard navigation, form errors, and performance"
-```
-
-### Resume a paused run
-
-```powershell
-ui-agent status
-ui-agent resume <run-id> --interactive
-```
-
-### Recreate from screenshots you own
-
-```powershell
-ui-agent recreate `
-  --project . `
-  --reference .\references\desktop.png .\references\mobile.png `
-  --brief "Recreate this responsive visual system using my content"
-```
-
-### Recreate from an authorized public URL
-
-```powershell
-ui-agent recreate `
-  --project . `
-  --url https://authorized.example `
-  --authorized `
-  --brief "Transfer the visible design system using replacement content and licensed assets"
-```
-
-Only use `--authorized` when you have permission to analyze and recreate the referenced site.
-
-## Groq and local models
-
-The default provider mode is `auto`:
-
-```text
-Try local /api/tags and /v1/models
-            |
-            +-- both work --> use the exact local model
-            |
-            +-- missing/error --> load GROQ_API_KEY and use Groq
-```
-
-The hosted fallback is restricted to Groq's official OpenAI-compatible endpoint:
-
-```text
-https://api.groq.com/openai/v1
-```
-
-Default Groq models:
-
-- Coding, structured output, and tools: `openai/gpt-oss-20b`
-- Screenshot and image understanding: `qwen/qwen3.8-27b`
-
-The agent loads the nearest `.env`, starting in the current project and walking upward only as far as the nearest Git repository boundary. For example, a command run from `D:\PS2\test_folder_1` can use `D:\PS2\.env` without copying the key into the child project.
-
-Choose provider behavior explicitly when needed:
-
-```powershell
-ui-agent config set provider auto   # local first, Groq fallback
-ui-agent config set provider groq   # always use Groq
-ui-agent config set provider local  # never send model data remotely
-```
-
-Change the hosted model IDs only when Groq currently returns those exact IDs:
-
-```powershell
-ui-agent config set groq-model openai/gpt-oss-20b
-ui-agent config set groq-visual-model qwen/qwen3.8-27b
-ui-agent doctor
-```
-
-API-key values are never stored in `.ui-agent/config.json`, doctor reports, or run manifests. Generated build and preview processes do not inherit `GROQ_API_KEY`.
-
-When Groq is active, prompts, tool context, and attached screenshots are sent to Groq. Use `provider local` for work that must remain on-device.
-
-## When to run the doctor
-
-Run:
-
-```powershell
-ui-agent doctor
-```
-
-Use `--json` only when you need machine-readable diagnostics:
-
-```powershell
-ui-agent doctor --json
-```
-
-You normally run the doctor:
-
-- After initial installation.
-- After changing provider, endpoint, API key, or model IDs.
-- When a workflow reports missing model capability.
-- After updating the agent or Playwright browser.
-
-You do not need to run it before every task. A successful report is stored in `.ui-agent/doctor/latest.json` and reused while it remains current and matches the provider, endpoint, and model.
-
-The command is `ui-agent doctor`, not `ui-agent-doctor`.
-
-## Interaction level
-
-For a Codex- or Claude Code-like experience, use `balanced`:
-
-```powershell
-ui-agent config set interaction balanced
-```
-
-Available modes:
-
-- `balanced`: recommended for normal use; asks about material uncertainty and important design choices.
-- `autonomous`: makes routine implementation decisions with fewer pauses.
-- `high`: asks for approval at more design and workflow checkpoints.
-
-Set autonomous mode when the task and permissions are already clear:
-
-```powershell
-ui-agent config set interaction autonomous
-```
-
-Even autonomous mode still stops for destructive actions, authorization issues, conflicts, and genuinely ambiguous decisions.
-
-## One-time installation versus daily operation
-
-These are setup or maintainer commands, not daily commands:
-
-```powershell
-npm install --ignore-scripts
-npx playwright install chromium
-npm run build
+```bat
+cd /d D:\PS2
 npm link
 ```
 
-Repository contributors can validate all deterministic code gates with:
+This is already done on this machine. `npm link` puts `uagent` (and the older `ui-agent`) next to npm's other global commands in `%APPDATA%\npm`, which is on your PATH, so it works straight away in every Command Prompt, PowerShell and Windows Terminal window, including ones that were already open. Check:
 
-```powershell
-npm run check
-npm run test:e2e
+```bat
+where uagent
+uagent --version
 ```
 
-Ordinary operators do not need to run these tests before asking the agent to work.
+The first should print `C:\Users\<you>\AppData\Roaming\npm\uagent.cmd`, the second pi's version (for example `0.85.1`). The command runs `D:\PS2\bin\uagent.mjs`; edit that file to change its default models for everyone on this machine.
+### Changing models
 
-## Common problems
+The launcher's choices are defaults. Any of these variables, set before you run `uagent`, takes precedence: `UI_LLM_URL`, `UI_MODEL_INTAKE`, `UI_MODEL_DIRECTOR`, `UI_MODEL_ANALYST`, `UI_MODEL_BUILDER`, `UI_MODEL_SHOWPIECE`, `UI_MODEL_CRITIC`. For example, to try another critic for one session:
 
-### `Groq fallback requires GROQ_API_KEY`
-
-The agent could not use the local endpoint and did not find a key. Put the key in the nearest applicable `.env`:
-
-```dotenv
-GROQ_API_KEY=gsk_your_key_here
+```bat
+set UI_MODEL_CRITIC=qwen3-vl:8b
+uagent
 ```
 
-Then rerun:
+(In PowerShell: `$env:UI_MODEL_CRITIC = "qwen3-vl:8b"`.) Use `setx` instead of `set` to keep a choice for all new windows. The other settings (`UI_PARALLEL`, `UI_ROUNDS`, …) are listed in the README's Configuration table.
 
-```powershell
-ui-agent doctor
+### Which model does what, and why
+
+| Role | Model | What it does |
+|---|---|---|
+| pi's main model | `qwen3.8:27b` | talks to you and hands website requests to the `ui` tool |
+| intake | `qwen3-coder:30b` | decides what kind of change you want on an existing site |
+| director | `qwen3.8:27b` | plans the site: direction, DESIGN.md, colors, fonts, sections |
+| analyst | `qwen3.8:27b` | describes a reference site section by section (vision) |
+| builder | `qwen3-coder:30b` | writes each section as one React file |
+| showpiece | `qwen3-coder:30b` | the single 3D or pinned-scroll moment (not finished yet; see Limits) |
+| critic | `qwen3.8:27b` | looks at desktop and mobile screenshots and scores each section (vision) |
+
+These came from trials on the server using the agent's real code:
+
+- **Director:** `qwen3.8:27b` produced the most specific plans with copy that fit the brief. `gpt-oss:120b`'s plans were valid but generic, and once its copy contradicted the brief. `nemotron-3.5-lightning:30b` failed both test briefs (it missed the contrast rule twice, then hit the 10-minute limit).
+- **Builder:** all three tested models passed every check. `qwen3-coder:30b` took 12–49 s per section; `qwen3.8:27b` took 40–186 s and `gpt-oss:120b` 118–302 s.
+- **Critic:** `qwen3.8:27b` gave concrete, class-level fixes. `qwen3-vl:8b` hit the 10-minute limit on its first review.
+- **Main model:** `qwen3.8:27b` called the `ui` tool with your words unchanged. `qwen3-coder:30b` didn't call the tool; it tried to write the site itself, in a tool-call format the server doesn't recognise. `gpt-oss:120b` rewrote the request (adding its own colors and frameworks).
+- **Too big:** `devstral-2:123b` (171 GB once loaded) and `qwen3:235b` don't fit on the server next to the other roles.
+
+`qwen3.8:27b` and `qwen3-coder:30b` fit on the server together (~66 GB), so there are no model swaps between steps. If you host a new model, check pi sees it with `uagent --list-models selfhosted` and try it in one role at a time.
+
+## 3. Use it
+
+Open a terminal in the folder where the site should be created (a new, empty folder is best) and type `uagent`:
+
+```bat
+mkdir D:\sites\crumb
+cd /d D:\sites\crumb
+uagent
 ```
 
-Do not put a real key in `.env.example`; that file is safe to commit and must contain only a placeholder.
+pi opens with the UI Agent loaded. Type your request at its prompt; quit pi with Ctrl+C twice (or `/quit`).
 
-### Local inference fails even though Groq is configured
-
-Confirm provider mode:
-
-```powershell
-ui-agent config show --json
-ui-agent config set provider auto
-ui-agent doctor
-```
-
-In `auto` mode, an unreachable local discovery endpoint, an HTTP error from local discovery, or an error from local `/v1/models` causes Groq fallback. In `local` mode, fallback is intentionally disabled.
-
-### Browser executable is missing
-
-```powershell
-npx playwright install chromium
-ui-agent doctor
-```
-
-### The run pauses or says `pending_input`
-
-This is usually an approval or clarification, not a crash:
-
-```powershell
-ui-agent status
-ui-agent resume <run-id> --interactive
-```
-
-Use `balanced` or `autonomous` if `high` mode pauses more often than you want.
-
-### The target directory is not empty
-
-Use `improve` for an existing project:
-
-```powershell
-ui-agent improve --project . --brief "Describe the change"
-```
-
-Use `create` only with a new or empty output directory.
-
-### Model or rate-limit error
-
-Groq rate limits are retried using the provider's `Retry-After` response. If the limit persists, wait briefly and rerun the command. If a configured model ID has been removed, select an exact ID currently returned by Groq and rerun the doctor.
-
-### Windows reports `spawn EPERM`
-
-Close processes that may be locking Node or Chromium, confirm endpoint protection is not blocking child processes, and try:
-
-```powershell
-npm run build
-ui-agent doctor
-```
-
-If only the runtime or browser check fails while all model checks pass, the Groq fallback is working; resolve the local process-launch restriction separately.
-
-## Status and files
-
-Useful commands:
-
-```powershell
-ui-agent status
-ui-agent status <run-id>
-ui-agent status <run-id> --json
-```
-
-Run state and evidence are stored under:
+Ask in plain words. Mention what the site is for, what must be on it, and any style you want:
 
 ```text
-.ui-agent/runs/<run-id>/
+Make a one-page website for my bakery, Crumb & Co. We're open Tuesday to Sunday,
+known for 48-hour sourdough, and take cake orders four days in advance.
 ```
-
-Doctor evidence is stored under:
 
 ```text
-.ui-agent/doctor/<timestamp>/
-.ui-agent/doctor/latest.json
+/ui make a site for a 12-room harbour hotel in St Ives with prices and a booking form
 ```
 
-Do not manually edit an active run manifest. Resume the run through the CLI so the Pi session, decisions, approvals, defects, and evidence remain consistent.
+`/ui <request>` asks pi's main model to pass your request to the `ui` tool unchanged. Plain messages work too, because the main model is told to use the `ui` tool for any website request.
 
-## Safety boundaries worth knowing
+To **recreate a design**, include the link or a screenshot path:
 
-- Local model endpoints must remain loopback-only.
-- Groq credentials can only be sent to the pinned official Groq endpoint.
-- `.env`, Git internals, SSH keys, and common credential files are protected from model file tools.
-- Preview child processes receive a scrubbed environment.
-- URL recreation requires explicit `--authorized` confirmation.
-- External imagery requires acceptable licensing and provenance.
-- Agent checkpoints do not replace your own Git commits or backups.
+```text
+Recreate the design of https://example.com for my bakery, using my own copy.
+Recreate the design in D:\refs\landing.png for my hotel.
+```
 
-For configuration details, see [`docs/configuration.md`](docs/configuration.md). For architecture and implementation details, see [`PROJECT_IN_DEPTH.md`](PROJECT_IN_DEPTH.md).
+The agent recreates structure, rhythm, type scale, colors and motion, and writes original copy. Its prompts forbid reusing the reference's logos, brand names, product names or photos, and the director never sees the reference's text.
+
+To **ask for a style**, say it in the request ("make it feel like a printed magazine", "dark and technical", "bold and colorful"); the director plans around it. (The three style presets in `presets/` are used by the eval harness; the `ui` tool doesn't pick them automatically yet.)
+
+### What happens while it works
+
+On the model server, a five-section site took about 11 minutes in testing: about 2 minutes of planning, under a minute to write the sections, then 3–5 minutes per check-and-fix round. Sites whose sections pass in the first round finish sooner. You'll see progress lines like:
+
+```text
+✓ direct
+✓ build Hero (round 0)
+✗ gates (round 0) — 1 issues, 5 mounted: Menu/runtime: <div class="w-[900px]"> sticks out 510px past the vi…
+✓ critic Hero (round 0) — score 8
+✓ fix Menu (round 1)
+✓ promote (round 1) — Hero,Menu,Visit
+```
+
+1. The **director** commits to a direction, writes `DESIGN.md`, picks colors (checked for readable contrast) and Google Fonts (checked that they exist), and plans 4–7 sections.
+2. **Builders** write all sections in parallel.
+3. Every round, the **gates** check each section, a **browser** opens the page at phone (390 px) and desktop (1440 px) width and with reduced motion, and the **critic** reviews screenshots of sections that passed.
+4. Sections that pass are copied into `site/` straight away. Sections that fail get one fix per round, each with only its own problems, for up to 3 rounds.
+
+### The report
+
+```text
+Preview: http://127.0.0.1:63936/
+- Hero: pass (8/10)
+- Menu: fixed (7/10)
+- Visit: excluded — Runtime error at 390px: …
+9 model calls, 48210 tokens, 412s. Details in .ui/.
+```
+
+| Status | Meaning |
+|---|---|
+| `pass` | passed on the first try |
+| `fixed` | passed after one or more fixes |
+| `rolled_back` | passed once, a later change failed, so the last passing version is live |
+| `excluded` | never passed; it is not on the page, and the reason is shown |
+
+The score is the critic's (8+ means a top studio would ship it). The preview URL works while pi stays open. To view the site later, run it yourself:
+
+```powershell
+cd D:\sites\crumb\site
+npm run dev
+```
+
+### What the checks look for
+
+- **Code rules:** imports only React, Motion and the kit; colors only from the design tokens; images with `alt`, `width` and `height`; animation of position and opacity only (no width, height or margin animation); `min-h-svh` instead of `h-screen`; no filler words (unleash, elevate, seamless…); at most 150 lines per section.
+- **Build:** TypeScript errors, the Vite build, and 3D code kept out of the first download.
+- **Browser, at 390 px and 1440 px:** content sticking out past the screen edge, text that never becomes visible, layout shift, scroll jank, long main-thread tasks, runtime errors, slow first paint, and text hidden when reduced motion is on.
+- **Critic:** hierarchy, typography, spacing, contrast, mobile layout, fidelity to the plan or reference, and generic "AI-looking" patterns.
+
+## 4. Files it creates
+
+Inside your project folder:
+
+| Path | What it is |
+|---|---|
+| `site/` | the live website (Vite + React + TypeScript + Tailwind + Motion). Only passing sections are in it. |
+| `DESIGN.md` | the design document the director wrote |
+| `.ui/plan.json` | the plan: direction card, tokens, sections |
+| `.ui/stage/` | the work area, including attempts that failed |
+| `.ui/green/` | the last passing version of each section |
+| `.ui/runs/<time>.jsonl` | one line per model call and gate round: model, tokens, time, issues found |
+| `.ui/shots/<round>/<390 or 1440>/<Section>.png` | the screenshots the critic saw |
+| `.ui/ref/` | the captured reference (clone only): facts, section crops, scroll frames, hover |
+
+`site/node_modules` is a link to the agent's kit install, so a new site needs no download. To give a site its own copy (for example before moving it elsewhere), run `npm install` inside `site/`.
+
+To start a site over, delete `site/`, `.ui/` and `DESIGN.md`. Running a new build request in the same folder replans the site and replaces the live sections as the new ones pass.
+
+## 5. Evaluating models and prompts
+
+The eval harness runs 20 varied briefs (portfolio, SaaS, restaurant, event, editorial and more; 5 ask for motion or 3D) headless against whatever models are configured:
+
+```powershell
+npm run eval -- --out evals/out/my-run
+npm run eval -- --out evals/out/my-run --only restaurant-ramen,devtool-cli
+```
+
+It writes `results.csv` after every brief and prints a summary table with, per brief: first-round gate pass rate, rounds to green, mean critic score, slop findings, rollbacks, excluded sections, model calls, tokens in/out and wall time. Each brief's full output stays in its own folder. Running again with the same `--out` skips briefs that already finished, so an interrupted run resumes.
+
+Reference recreation is evaluated too once you fill in the URLs in `evals/refs.json`; entries without a URL are skipped. Change prompts or models only when the eval numbers improve.
+
+## 6. Troubleshooting
+
+**"'uagent' is not recognized as an internal or external command"**: the command isn't installed on this machine yet. Run `npm link` in `D:\PS2` (step 2); `where uagent` should then print a path in `%APPDATA%\npm`. In PowerShell, if it says running scripts is disabled, use the same window type where `ui-agent` works, or run `uagent.cmd`. Typing `uagent` in the Start menu or Run box won't work; it's a terminal command.
+
+**"Set UI_MODEL_DIRECTOR to the model id…"**: a role has no model set. Set the variable from step 2 in this terminal.
+
+**"Unknown provider selfhosted", or a warning that `…/models` didn't answer**: pi lists the server's models once when it starts. If the server was unreachable then (or `UI_LLM_URL` wasn't set in this terminal), check the server with the `Invoke-RestMethod` line from step 1 and start pi again.
+
+**"model '…' not found" (HTTP 404)**: the model id doesn't exist on the server. List the exact ids with `Invoke-RestMethod http://127.0.0.1:18080/api/tags` or `uagent --list-models selfhosted`.
+
+**"… reply was invalid twice: …"**: the model's answer didn't match the required format twice in a row. Only that section (or step) fails; the reason is in the report and in `.ui/runs/`. If one model does this often, try another for that role.
+
+**"The operation was aborted due to timeout"**: one model call took more than 10 minutes, usually because the server is overloaded or the model is too slow. Lower `UI_PARALLEL`, or use a faster model for that role.
+
+**"The edit flow isn't available yet"**: changing an existing site (edit, style, motion, audit) isn't built yet. Start a new build in a new folder, or ask for the whole site again.
+
+**A section is always `excluded`**: read the reason in the report. If the director planned it as a 3D or pinned **showpiece**, it fails until the showpiece builder is finished. Ask for the site again without 3D, or ask for scroll motion instead.
+
+**The main model writes files itself instead of calling the UI Agent**: use `qwen3.8:27b` as pi's main model. To allow only the UI Agent, start it with `uagent --no-builtin-tools`.
+
+**Fonts look different from the plan**: the agent couldn't reach Google Fonts, so it used system fonts and logged a `fonts` line. Allow internet access, or set `UI_FONTS_URL` to a mirror.
+
+**"Executable doesn't exist" / browser missing**: run `npx playwright install chromium`, or set `UI_CHROME_PATH` to an installed Chromium.
+
+**The preview URL stopped working**: it closes with pi. Run `npm run dev` inside `site/`.
+
+**`pi -p "…"` hangs in a script**: pi waits for piped input. Close stdin, for example `$null | & D:\PS2\node_modules\.bin\pi.cmd -p "…"`.
+
+## 7. Limits to know about
+
+- New sites and recreations work. Edits, restyles, motion changes and audits of an existing site are not available yet.
+- 3D showpieces are unfinished: a section planned as a showpiece is left out.
+- One page per site. Images are placeholders (`/demo/photo.svg`) in fixed aspect-ratio slots, so real images can replace them without layout shifts.
+- A request can't be cancelled once started; each model call is limited to 10 minutes.
+- Generated copy is the director's; review it before publishing.
+- The older prototype (`ui-agent` command, `ui-agent doctor`, Groq fallback, `.ui-agent/` folder) is still in the repository but no longer used by the UI Agent. Its removal is pending approval.

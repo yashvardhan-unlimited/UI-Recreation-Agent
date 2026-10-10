@@ -1,88 +1,129 @@
-# Local UI Agent
+# UI Agent
 
-Local UI Agent is a reusable frontend coding harness built on the real `@earendil-works/pi-coding-agent` SDK. It uses one persistent Pi session to collaborate on requirements and design, edit a project through narrow typed tools, run the frontend, inspect it in Playwright, capture screenshots, review them with a verified visual model, repair defects, and resume from versioned run state. It prefers local inference and can automatically fall back to Groq when the local endpoint is unavailable.
+The UI Agent is the website-building part of our pi-based coding agent. It turns a plain-language request, a reference link or a screenshot into an animated, responsive website (Vite + React + TypeScript + Tailwind + Motion). It checks its own work in a real browser, fixes what is broken, and runs entirely on our self-hosted open models.
 
-It is a frontend-only agent. It may create typed mock adapters and fixtures, but it does not create production databases, authentication, payments, or backend services.
+It plugs into [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) as one tool, `ui`, plus a `/ui` command. You talk to pi as usual; when you ask for a website, pi hands the request to the UI Agent.
 
-## Current validation status
+- How to install and use it day to day: **[AGENT_OPERATIONS_GUIDE.md](AGENT_OPERATIONS_GUIDE.md)**
+- How it is designed, and the rules the code follows: **[ARCHITECTURE.md](ARCHITECTURE.md)** (source of truth) and [CLAUDE.md](CLAUDE.md)
 
-The source, typecheck, lint, build, deterministic tests, and a real generated-project acceptance test pass. The acceptance test creates a lockfile, installs with scripts disabled, builds, runs the generated Playwright test, launches a production preview, inspects/interacts at desktop and mobile sizes, audits it, captures screenshots, and cleans up. The local endpoint was unavailable during the latest validation. Automatic Groq selection, authenticated model discovery, and secret isolation are covered by deterministic tests; a real Groq doctor/model-driven run still requires a valid `GROQ_API_KEY`. See [the validation report](docs/validation-report.md).
+## Quick start (Windows)
 
-## Install
+One-time setup:
 
 ```powershell
 cd D:\PS2
-npm install --ignore-scripts
-npx playwright install chromium
-Copy-Item .env.example .env
-# Edit .env and replace the placeholder with your GROQ_API_KEY.
-npm run check
-npm run build
-npm link
+npm install
+cd kit; npm install; cd ..          # every generated site links to this install
+npx playwright install chromium     # used for screenshots and browser checks
+npm link                            # installs the `uagent` command (already done on this machine)
 ```
 
-`npm link` makes the `ui-agent` command available. Without linking, substitute `node dist/cli.js` for `ui-agent`.
+`npm link` puts `uagent` next to npm's other global commands (in `%APPDATA%\npm`, which is already on PATH), so it works in every Command Prompt and PowerShell window, including ones that were already open.
 
-Copy [ui-agent.config.example.json](ui-agent.config.example.json) to `.ui-agent/config.json` if you want explicit project-local settings. The checked-in example names `qwen3.8:27b` only because `/api/tags` actually returned that exact ID on this machine; the runtime still rediscovers and validates exact IDs.
+Start it from the folder where the website should be created:
 
-## Required first command
-
-```powershell
-ui-agent doctor
+```bat
+mkdir D:\sites\crumb
+cd /d D:\sites\crumb
+uagent
 ```
 
-With the default `model.provider=auto`, the doctor probes the local endpoint first and falls back to `https://api.groq.com/openai/v1` only when local inference is unavailable and `GROQ_API_KEY` is present. It separately reports backend selection, discovery, `/models`, plain text, structured JSON and recovery, direct tools, a Pi tool/result continuation with a safe file round trip, single-image understanding, two-image comparison, Node/npm/port allocation, and Chromium screenshot output. A create/recreate/resume run requires the relevant checks in `.ui-agent/doctor/latest.json` to be `PASS` for the same provider, endpoint, and exact model ID.
+`uagent` opens pi with the UI Agent and the models on `http://127.0.0.1:18080` already set (see [Roles and models](#roles-and-models)); to change one, set the matching variable from [Configuration](#configuration) before running it.
 
-## Commands
-
-```powershell
-ui-agent doctor
-ui-agent create --brief .\fixtures\briefs\robotics.md --out .\examples\generated\robotics
-ui-agent improve --project .\my-app --brief "Improve hierarchy, responsive behavior, and accessibility"
-ui-agent recreate --project .\my-app --reference .\desktop.png .\mobile.png --brief "Use my content; close visible match"
-ui-agent recreate --project .\my-app --url https://authorized.example --authorized --brief "Transfer this visual system with replacement content"
-ui-agent audit --project .\my-app
-ui-agent status <run-id>
-ui-agent resume <run-id>
-ui-agent config set interaction high
-ui-agent config set interaction balanced
-ui-agent config set interaction autonomous
-ui-agent config set provider auto
-ui-agent config set model qwen3.8:27b
-ui-agent config set visual-model qwen3.8:27b
-ui-agent config set groq-model openai/gpt-oss-20b
-ui-agent config set groq-visual-model qwen/qwen3.8-27b
-```
-
-`high` is the default. In a real terminal, create/improve/recreate open Pi's TUI and use native selectors, confirms, text input, editor, notifications, widgets, the `/ui-decisions` custom overlay, and an inline contact-sheet image selector. In a non-interactive host, grouped material questions and approvals are persisted as `pending_input` rather than guessed.
-
-## Workflow
-
-The bounded state machine is:
+Then ask, for example:
 
 ```text
-UNDERSTAND → PLAN → IMPLEMENT → BUILD → RUN → EXERCISE → CAPTURE → REVIEW → REPAIR → VERIFY
+Make a one-page website for my bakery, Crumb & Co. We're open Tuesday to Sunday and known for sourdough.
+/ui make a site for a 12-room harbour hotel in St Ives
+Recreate the design of https://example.com for my bakery, with my own copy
 ```
 
-Visual repairs always render again. Deterministic failures override a favorable visual opinion. Checkpoints are ranked by functional gates, blocker/high defects, design/reference quality, then accessibility and performance.
+The tool streams progress (`✓ build Hero (round 0)`, `✓ critic Hero (round 0) — score 8`, …) and ends with a short report:
 
-Run artifacts live under `.ui-agent/runs/<run-id>/` and include the immutable input, copied references, manifest, Pi JSONL session, checkpoints, logs, screenshots, diffs, visual evidence, defects, approvals, and provenance. Images and repetitive raw logs are stored as artifacts rather than injected repeatedly into model context.
+```text
+Preview: http://127.0.0.1:63936/
+- Hero: pass (8/10)
+- Menu: fixed (7/10)
+- Visit: excluded — Runtime error at 390px: …
+9 model calls, 48210 tokens, 412s. Details in .ui/.
+```
 
-## Documentation
+The preview URL stays live while pi is open. The finished site is in `site/` inside your folder.
 
-- [Simple operations guide](AGENT_OPERATIONS_GUIDE.md)
-- [Architecture and Mermaid diagrams](docs/architecture.md)
-- [Configuration and workflows](docs/configuration.md)
-- [Security and threat model](docs/security.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Selected versions and official API sources](docs/versions.md)
-- [Validation report](docs/validation-report.md)
+## How it works
 
-## Important limitations
+```text
+request ──▶ intake ──▶ build flow  ─┐
+            (rules;    clone flow ──┤
+             model only            ▼
+             for an       director: direction card, DESIGN.md, colors/fonts, 4–7 sections
+             existing     assemble: tokens.css + Google Fonts check
+             site)        builders: every section written in parallel (one file each)
+                                    ▼
+                          loop, up to UI_ROUNDS fix rounds:
+                            gates  ─ lint rules, TypeScript, Vite build, 3D-chunk check
+                            browser audit ─ 390 px, 1440 px, reduced motion
+                            critic ─ screenshots of sections that passed and changed
+                            passing sections ──▶ snapshot ──▶ promoted to site/
+                            failing sections ──▶ fixed, each with only its own issues
+                          after the last round: never-passed sections are left out,
+                          regressed ones roll back to their last passing version
+```
 
-- This machine has no Docker or Podman. Preview commands receive a scrubbed environment and project-scoped cwd with process-tree cleanup, but this is not a hostile multi-tenant sandbox.
-- Reference URL browsing blocks private/reserved addresses, credentials, nonstandard ports, popups, downloads, non-GET requests, and cross-origin top-level navigation. It is intentionally conservative and may block complex authorized sites.
-- Openverse is the implemented live image-search adapter. Wikimedia is represented in configuration for the adapter boundary but is not yet implemented as a separate search client.
-- Lighthouse is supported programmatically, but results vary by machine; use repeated median runs for release budgets.
-- Live model/Pi/vision acceptance requires either the loopback server at port 18080 or a valid `GROQ_API_KEY`, followed by a passing doctor.
-- Groq fallback sends model prompts and attached screenshots to Groq. Use `model.provider=local` when content must remain on-device.
+- **Clone flow:** for a link, Playwright captures the page at 1440 px and 390 px. It measures fonts, colors, the size scale and radii, screenshots each section, records three scroll frames per section and the main button's hover state. For a screenshot, the analyst model marks the section bands and code crops them. The analyst describes each section, and the director recreates the structure and feel with **original** copy. The critic compares each section with its reference crop.
+- **Nothing broken reaches `site/`:** a section that doesn't compile is left out of the page, and only sections that passed every check are copied to `site/`.
+- **Files are the shared memory:** each model call gets only what it needs (one section spec, its own issues), never another section or the chat history.
+
+### Roles and models
+
+| Role | What it does | Model on the server | Why this one |
+|---|---|---|---|
+| intake | routes a request about an existing site (edit / style / motion / audit) | `qwen3-coder:30b` | routed all test requests correctly in ~1 s |
+| director | plans the site: direction, DESIGN.md, colors, fonts, sections | `qwen3.8:27b` | the most specific, on-brief plans in trials |
+| analyst | describes a reference site section by section | `qwen3.8:27b` | vision model |
+| builder | writes one section as a React file | `qwen3-coder:30b` | all trial sections passed every gate, 3–5× faster than the alternatives |
+| showpiece | the one 3D or pinned-scroll moment | `qwen3-coder:30b` | strongest coder that fits next to the others |
+| critic | reviews screenshots, scores 0–10, lists concrete fixes | `qwen3.8:27b` | concrete reviews that cite Tailwind classes; `qwen3-vl:8b` timed out |
+| pi's main model | talks to you and calls the `ui` tool | `qwen3.8:27b` | passes your request through unchanged |
+
+Both models stay loaded together on the server (~66 GB), so nothing swaps between steps. Models we tried and did not pick: `nemotron-3.5-lightning:30b`, `gpt-oss:120b`, `qwen3-vl:8b`, `devstral-2:123b`, `qwen3:235b`. The guide explains why.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `UI_LLM_URL` | `uagent`: `http://127.0.0.1:18080/v1`; otherwise `http://localhost:8000/v1` | OpenAI-compatible server for all roles; also enables pi's `selfhosted` provider |
+| `UI_LLM_URL_<ROLE>` | — | different server for one role (`INTAKE`, `DIRECTOR`, `ANALYST`, `BUILDER`, `SHOWPIECE`, `CRITIC`) |
+| `UI_MODEL_<ROLE>` | `uagent`: the models in the table above | model id per role (required for the roles a flow uses) |
+| `UI_LLM_KEY` | `local` | bearer token for the server |
+| `UI_PARALLEL` | `3` | model calls at once |
+| `UI_ROUNDS` | `3` | fix rounds before giving up on a section |
+| `UI_PASS_SCORE` | `7` | critic score a section needs (and no high-severity issue) |
+| `UI_JANK_MS` | `120` | worst allowed frame while scrolling |
+| `UI_SECTION_LINES` | `150` | line budget per generated section |
+| `UI_CHROME_PATH` | Playwright's Chromium | use another Chromium |
+| `UI_FONTS_URL` | `https://fonts.googleapis.com` | Google Fonts or a mirror |
+
+## Current status
+
+Working and tested: building a new site from a request, recreating a design from a link or a screenshot, the quality gates and browser checks, the critic, promotion and rollback, the pi tool, the `/ui` command, the `selfhosted` provider and the live preview. The eval harness (`npm run eval`) runs 20 briefs headless and writes a CSV.
+
+Not done yet:
+
+- **Edit, style, motion and audit requests** on an existing site are routed correctly but answered with "this flow isn't available yet".
+- **3D showpieces are incomplete.** A section the director plans as a 3D or pinned showpiece fails and is left out: the showpiece prompt and its 3D browser checks are still missing. Ordinary sections can still use scroll motion.
+- One page per site; images are placeholders (`/demo/photo.svg`).
+- A running request can't be cancelled; each model call is capped at 10 minutes.
+
+The repository still contains the earlier prototype (`src/cli.ts`, `src/pi/`, `src/tools/`, `tests/`, `docs/` and the `ui-agent` command with its doctor and Groq fallback). The UI Agent doesn't use any of it; its removal is pending approval.
+
+## Development
+
+```powershell
+npm run check     # typecheck + lint + tests
+npm test          # tests only (~45 s)
+npm run eval -- --out evals/out/my-run    # 20 briefs against the configured models
+```
+
+Tests use an in-process mock model server (`test/mock-llm.ts`), a real Chromium and the real pi CLI. Code changes follow [CLAUDE.md](CLAUDE.md): small functions, per-file line budgets from ARCHITECTURE.md §9, and model prompts only in `prompts/*.md`.

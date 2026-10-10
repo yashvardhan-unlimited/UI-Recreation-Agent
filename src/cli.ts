@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { stdin as input, stdout as output } from "node:process";
 import { Command } from "commander";
 import pc from "picocolors";
 import { loadConfig, saveConfig, setInteractionLevel } from "./config/load.js";
 import { appConfigSchema, interactionLevelSchema } from "./config/schema.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
+import { inferWorkflowKind, latestResumableRun } from "./launcher.js";
+import { runLauncherUi } from "./pi/launcher-ui.js";
 import { RunStore } from "./state/store.js";
 import { safeError } from "./utils/errors.js";
 import { consoleLogger } from "./utils/log.js";
@@ -14,6 +17,27 @@ import { resumeWorkflow, startWorkflow } from "./workflows/orchestrator.js";
 const program = new Command();
 program.name("ui-agent").description("Pi-powered frontend creation, recreation, audit, and repair agent").version("0.1.0");
 program.option("--config <path>", "configuration file (default: .ui-agent/config.json)");
+
+program.action(async () => {
+  if (!input.isTTY || !output.isTTY) {
+    throw new Error("The UI Agent launcher needs an interactive terminal. Use a workflow command such as 'ui-agent create --brief <text> --out <directory>' in non-interactive environments.");
+  }
+  const previousRun = latestResumableRun(await new RunStore(process.cwd()).list());
+  const choice = await runLauncherUi({
+    cwd: process.cwd(),
+    ...(previousRun ? { previousRun } : {})
+  });
+  if (choice.kind === "cancel") return;
+
+  const config = await configFor(program);
+  if (choice.kind === "resume") {
+    await resumeWorkflow({ runId: choice.runId, workspaceRoot: process.cwd(), config, logger: consoleLogger, interactive: true });
+    return;
+  }
+  const kind = await inferWorkflowKind(choice.prompt, process.cwd());
+  const runId = await startWorkflow({ kind, brief: choice.prompt, projectRoot: process.cwd(), workspaceRoot: process.cwd(), config, logger: consoleLogger, interactive: true });
+  console.log(`Run ${runId}`);
+});
 
 program.command("doctor").description("Verify model backend, Pi, browser, runtime, and visual capabilities").option("--json", "print JSON report").action(async (options) => {
   const config = await configFor(program);

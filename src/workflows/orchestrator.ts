@@ -33,7 +33,7 @@ export async function startWorkflow(input: { kind: "create" | "improve" | "recre
     run = { ...run, approvals: [...run.approvals, { id: crypto.randomUUID(), kind: "url_authorization", approved: true, summary: `User confirmed authorization for ${input.referenceUrl}`, at: new Date().toISOString() }] };
     await runStore.save(run);
   }
-  const harness = await createPiHarness({ config: activeConfig, provider: backend.provider, model: selected.coding, ...(visualModelId ? { visualModelId } : {}), run, runStore, logger: input.logger });
+  const harness = await createPiHarness({ config: activeConfig, provider: backend.provider, model: selected.coding, availableModels: backend.models, ...(visualModelId ? { visualModelId } : {}), run, runStore, logger: input.logger });
   run = { ...run, model: { provider: backend.provider, codingModelId: selected.coding.name, ...(visualModelId ? { visualModelId } : {}), protocol: activeConfig.model.protocol, endpoint: activeConfig.model.inferenceBaseUrl }, ...(harness.session.sessionFile ? { piSessionFile: harness.session.sessionFile } : {}) };
   await runStore.save(run);
   try {
@@ -60,7 +60,7 @@ export async function resumeWorkflow(input: { runId: string; workspaceRoot: stri
   if (!doctorMatchesConfig(doctor, activeConfig, selected.coding.name, backend.provider) || !hasPassingCheck(doctor, "pi_tool_roundtrip", selected.coding.name)) throw new UiAgentError("CAPABILITY_MISSING", "Resume requires a current matching Pi tool-roundtrip doctor check.");
   const visualModelId = verifiedVisualModel(doctor, selected.visual?.name);
   const resumedRun = run.status === "pending_input" ? run : { ...run, status: "running" as const };
-  const harness = await createPiHarness({ config: activeConfig, provider: backend.provider, model: selected.coding, ...(visualModelId ? { visualModelId } : {}), run: resumedRun, runStore, logger: input.logger, resumeSessionFile: run.piSessionFile });
+  const harness = await createPiHarness({ config: activeConfig, provider: backend.provider, model: selected.coding, availableModels: backend.models, ...(visualModelId ? { visualModelId } : {}), run: resumedRun, runStore, logger: input.logger, resumeSessionFile: run.piSessionFile });
   try {
     const prompt = resumeWorkflowPrompt(run);
     if (input.interactive ?? (run.interaction !== "autonomous" && Boolean(process.stdin.isTTY))) await runInteractiveHarness(harness, prompt);
@@ -92,7 +92,8 @@ function assertSupportedProtocol(config: AppConfig): void {
 async function ensureCreateTarget(projectRoot: string): Promise<void> {
   try {
     const entries = await readdir(projectRoot);
-    if (entries.length > 0) throw new UiAgentError("CONFLICT", `Create target is not empty: ${projectRoot}`, { suggestion: "Choose a new directory or use improve." });
+    const projectEntries = entries.filter((entry) => ![".git", ".ui-agent"].includes(entry));
+    if (projectEntries.length > 0) throw new UiAgentError("CONFLICT", `Create target is not empty: ${projectRoot}`, { suggestion: "Choose a new directory or use improve." });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }

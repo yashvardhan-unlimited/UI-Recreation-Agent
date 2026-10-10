@@ -34,7 +34,11 @@ export class PreviewManager {
     if (await exists(path.join(projectRoot, "package-lock.json"))) return this.checkedRun("npm", ["ci", "--ignore-scripts"], projectRoot, signal);
     if (await exists(path.join(projectRoot, "pnpm-lock.yaml"))) return this.checkedRun("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], projectRoot, signal);
     if (await exists(path.join(projectRoot, "yarn.lock"))) return this.checkedRun("yarn", ["install", "--immutable", "--ignore-scripts"], projectRoot, signal);
-    throw new UiAgentError("CAPABILITY_MISSING", "A lockfile is required before dependency installation.", { suggestion: "Commit package-lock.json, pnpm-lock.yaml, or yarn.lock." });
+    // Fresh agent-created projects cannot have a committed lockfile yet. Generate the
+    // deterministic npm lock before installing; lifecycle scripts remain disabled for
+    // both commands. Existing projects keep their package-manager lock semantics.
+    await this.createLockfile(projectRoot, signal);
+    return this.checkedRun("npm", ["ci", "--ignore-scripts"], projectRoot, signal);
   }
 
   async createLockfile(projectRoot: string, signal?: AbortSignal): Promise<ProcessResult> {

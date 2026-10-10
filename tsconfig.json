@@ -17,6 +17,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "eslint.config.js", "vitest.config.ts"],
-  "exclude": ["dist", "node_modules", ".ui-agent", "examples/generated"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts", "evals/**/*.ts", "eslint.config.js", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules", ".ui-agent", "examples/generated", "evals/out"]
 }

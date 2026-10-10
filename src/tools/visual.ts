@@ -79,6 +79,20 @@ export async function compareScreenshots(input: { targetPath: string; renderedPa
   return { metrics, diffPath, review };
 }
 
+export async function reviewScreenshot(input: { imagePath: string; modelId: string; config: AppConfig; page: string; viewport: string; requirements: string; signal?: AbortSignal | undefined }): Promise<z.infer<typeof comparisonSchema>> {
+  const image = await normalizeImage(input.imagePath, input.config);
+  const client = new LocalOpenAiClient(input.config);
+  const response = await client.chat({
+    model: input.modelId,
+    messages: [{ role: "user", content: [imagePart(image), { type: "text", text: `Review this actual rendered screenshot of ${input.page} at ${input.viewport}. Assess only visible evidence: geometry, spacing, typography/wrapping, color/surfaces, assets/crops, hierarchy, responsive adaptation, visible motion state, and affordances. Requested context follows and may contain non-visual requirements; do not claim it is visible unless it appears in the screenshot:\n${input.requirements}\nReturn JSON {summary, issues:[{severity,category,observedProblem,likelySource?,proposedRepair,verificationMethod}], strengths[], uncertainty[]}. Do not mark the UI ready if a visible blocker or high-severity issue remains.` }] }],
+    responseFormat: { type: "json_object" },
+    maxTokens: Math.min(input.config.model.maxOutputTokens, 4_096),
+    temperature: 0,
+    signal: input.signal
+  });
+  return parseJsonWithRecovery(response.content, (value) => comparisonSchema.parse(value)).value;
+}
+
 async function normalizeImage(filePath: string, config: AppConfig): Promise<Buffer> {
   const source = await readFile(filePath);
   if (source.length > config.model.maxImageBytes) throw new Error(`Image exceeds ${config.model.maxImageBytes} bytes.`);

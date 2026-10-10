@@ -25,6 +25,8 @@ Both files are covered deliberately: `.env` is ignored by Git, while `.env.examp
 
 Run `ui-agent doctor` after every endpoint/model change. Capability flags returned by `/api/tags` are informational only.
 
+In an interactive Pi session, `/model` shows every discovered model registered for the active backend, and `/model <provider/model>` switches the session model. It does not change the persisted default or bypass the doctor gate for a new workflow; use `ui-agent config set model <id>` followed by `ui-agent doctor` for that. Screenshot analysis/review continues to use the separately configured `visualModelId`, which must pass both vision checks.
+
 ## Interaction
 
 - `high`: pause for every material product/design choice.
@@ -35,7 +37,7 @@ High-interaction questions are grouped into 1–4 focused prompts with selectabl
 
 ## Create
 
-The agent restates and approves the brief, proposes visual directions, approves IA and direction, scaffolds the pinned React/Vite baseline, creates a lockfile, installs, implements, runs, exercises, captures, reviews, repairs, and verifies.
+The agent restates and approves the brief, proposes visual directions, approves IA and direction, scaffolds the pinned React/Vite baseline, creates a lockfile automatically when absent, installs, implements, runs, exercises, captures, sends rendered captures to the verified visual model for review, repairs, and verifies.
 
 ## Improve
 

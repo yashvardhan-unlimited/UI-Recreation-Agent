@@ -10,7 +10,7 @@ import { inspectProject } from "../tools/inspect-project.js";
 import { applyUiPatch, readRelevantFiles, type UiPatchOperation } from "../tools/files.js";
 import { PreviewManager } from "../tools/preview.js";
 import { BrowserManager } from "../tools/browser.js";
-import { analyzeReference, compareScreenshots } from "../tools/visual.js";
+import { analyzeReference, compareScreenshots, reviewScreenshot } from "../tools/visual.js";
 import { createCheckpoint, restoreCheckpoint } from "../tools/checkpoint.js";
 import { createAssetContactSheet, downloadApprovedImage, listAssets, registerSuppliedImage, type ImageCandidate } from "../tools/assets.js";
 import { searchImages } from "../tools/image-search.js";
@@ -127,7 +127,7 @@ export function createUiAgentExtension(deps: UiExtensionDependencies): Extension
       })
     });
     pi.registerTool({
-      name: "manage_preview", label: "Manage preview", description: "Install locked dependencies, build, start, stop, inspect logs, or run a package script in the isolated preview process boundary.",
+      name: "manage_preview", label: "Manage preview", description: "Generate a safe npm lockfile when needed, install dependencies with lifecycle scripts disabled, build, start, stop, inspect logs, or run a declared package script in the isolated preview process boundary. Use install for a new scaffold; it generates package-lock.json before npm ci when no lock exists.",
       parameters: Type.Object({ action: Type.Union([Type.Literal("lock"), Type.Literal("install"), Type.Literal("build"), Type.Literal("start"), Type.Literal("stop"), Type.Literal("status"), Type.Literal("script")]), script: Type.Optional(Type.String()), args: Type.Optional(Type.Array(Type.String(), { maxItems: 20 })) }),
       execute: guarded(async (params: { action: string; script?: string; args?: string[] }, signal) => {
         let result: unknown;
@@ -195,6 +195,24 @@ export function createUiAgentExtension(deps: UiExtensionDependencies): Extension
         const comparison = await compareScreenshots({ ...params, targetPath: assertEvidencePath(params.targetPath, currentRun), renderedPath: assertEvidencePath(params.renderedPath, currentRun), outputPath, modelId: deps.visualModelId, config: deps.config, signal });
         await persistJsonArtifact("screenshot_comparison", "comparisons", comparison, { targetPath: params.targetPath, renderedPath: params.renderedPath, diffPath: comparison.diffPath, page: params.page, viewport: params.viewport });
         return comparison;
+      })
+    });
+    pi.registerTool({
+      name: "review_screenshot", label: "Review screenshot", description: "Send a captured rendered screenshot to the verified visual model for a structured single-image UI review. Use after capture for every workflow; use compare_screenshots as well when an approved visual target exists.",
+      parameters: Type.Object({ imagePath: Type.String(), page: Type.String(), viewport: Type.String() }),
+      execute: guarded(async (params: { imagePath: string; page: string; viewport: string }, signal) => {
+        if (!deps.visualModelId) throw new UiAgentError("CAPABILITY_MISSING", "Screenshot review is unavailable without a verified visual model.");
+        const review = await reviewScreenshot({
+          imagePath: assertEvidencePath(params.imagePath, currentRun),
+          modelId: deps.visualModelId,
+          config: deps.config,
+          page: params.page,
+          viewport: params.viewport,
+          requirements: visualReviewContext(currentRun),
+          signal
+        });
+        await persistJsonArtifact("screenshot_review", "visual", review, { imagePath: params.imagePath, page: params.page, viewport: params.viewport, modelId: deps.visualModelId });
+        return review;
       })
     });
     pi.registerTool({
@@ -404,6 +422,15 @@ function assertEvidencePath(input: string, run: RunManifest): string {
   const roots = [path.resolve(run.projectRoot), path.resolve(run.runRoot)];
   if (!roots.some((root) => { const relative = path.relative(root, resolved); return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)); })) throw new UiAgentError("PATH_OUTSIDE_PROJECT", "Visual evidence path must be inside the project or current run artifact directory.");
   return resolved;
+}
+
+function visualReviewContext(run: RunManifest): string {
+  return JSON.stringify({
+    brief: run.immutableInput.brief,
+    acceptanceCriteria: run.acceptanceCriteria,
+    designSpec: run.designSpec,
+    decisions: run.decisions.map(({ topic, value }) => ({ topic, value }))
+  }).slice(0, 16_000);
 }
 
 function compactRunState(run: RunManifest): string {
