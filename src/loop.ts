@@ -28,12 +28,9 @@ export async function loop(dir: string, log: Log = runLog(dir)): Promise<Omit<Re
   const ids = [...specs.keys()];
   const design = await readFile(p.design, "utf8");
   const kit = await kitApi(join(p.stage, "src", "kit"));
-  const parallel = Number(process.env.UI_PARALLEL ?? 3);
-  const rounds = Number(process.env.UI_ROUNDS ?? 3);
-  const file = (id: string) => join(p.stage, SECTIONS, `${id}.tsx`);
-  const withFiles = async () => (await Promise.all(ids.map((id) => access(file(id)).then(() => true, () => false)))).flatMap((ok, i) => (ok ? [ids[i]!] : []));
+  const [parallel, rounds, passScore] = [process.env.UI_PARALLEL ?? 3, process.env.UI_ROUNDS ?? 3, process.env.UI_PASS_SCORE ?? 7].map(Number) as [number, number, number];
+  const withFiles = async () => (await Promise.all(ids.map((id) => access(join(p.stage, SECTIONS, `${id}.tsx`)).then(() => true, () => false)))).flatMap((ok, i) => (ok ? [ids[i]!] : []));
   const usage = { calls: 0, tokensIn: 0, tokensOut: 0 };
-  const passScore = Number(process.env.UI_PASS_SCORE ?? 7);
   const failures = new Map<string, string>(), verdicts = new Map<string, { score: number; notes: string[] }>();
   const fixed = new Set<string>(), everGreen = new Set<string>(), passedAs = new Map<string, string>();
 
@@ -42,6 +39,8 @@ export async function loop(dir: string, log: Log = runLog(dir)): Promise<Omit<Re
     const text = error ?? note;
     await log({ step, role: step === "critic" ? "critic" : specs.get(id)!.showpiece ? "showpiece" : "builder", model: u?.model ?? "", section: id, round, tokensIn: u?.tokensIn ?? 0, tokensOut: u?.tokensOut ?? 0, ms: Date.now() - t, ok: error === undefined, ...(text === undefined ? {} : { note: text }) });
   };
+  // Announced when it begins, so a step that takes minutes says what it is doing.
+  const start = (note: string, round?: number) => log({ step: "start", ms: 0, ok: true, note, ...(round === undefined ? {} : { round }) });
 
   // A model failure is recorded against this section only; its file stays as it was.
   const callBuilder = async (id: string, round: number, issues?: Issue[]) => {
@@ -81,23 +80,25 @@ export async function loop(dir: string, log: Log = runLog(dir)): Promise<Omit<Re
     }
   };
 
-  const built = await withFiles();
-  await pool(ids.filter((id) => !built.includes(id)), parallel, (id) => callBuilder(id, 0));
+  const built = await withFiles(), toBuild = ids.filter((id) => !built.includes(id));
+  if (toBuild.length) await start(`building ${toBuild.length} section(s), ${parallel} at a time`);
+  await pool(toBuild, parallel, (id) => callBuilder(id, 0));
 
   let issues: Issue[] = [], clean: string[] = [];
   for (let round = 0; ; round++) {
+    await start("checking: type-check, build, then the browser at 390 and 1440px", round);
     const t = Date.now();
-    const present = await withFiles();
-    const gate = await gates(p.stage, present);
+    const present = await withFiles(), gate = await gates(p.stage, present);
     issues = [...gate.issues, ...(gate.mounted.length ? await audit(p.stage, { sections: gate.mounted, shots: join(p.shots, String(round)) }) : [])];
     await log({ step: "gates", round, ms: Date.now() - t, ok: !issues.length, note: `${issues.length} issues, ${gate.mounted.length} mounted${issues.length ? ": " : ""}${issues.map((i) => `${i.section}/${i.source}: ${i.fix.split("\n")[0]!.slice(0, 160)}`).join(" | ")}` });
 
     const gateClean = gate.mounted.filter((id) => !issues.some((i) => i.section === id));
     const tokens = await readFile(join(p.stage, "src", "tokens.css"), "utf8");
-    const hashes = new Map<string, string>();
-    for (const id of gateClean) hashes.set(id, createHash("sha1").update(JSON.stringify(await stageFiles(dir, id)) + tokens).digest("hex"));
+    const hashes = new Map(await Promise.all(gateClean.map(async (id) => [id, createHash("sha1").update(JSON.stringify(await stageFiles(dir, id)) + tokens).digest("hex")] as const)));
     // §12: only sections that changed since they last passed are judged (and snapshotted) again.
-    await pool(gateClean.filter((id) => passedAs.get(id) !== hashes.get(id)), parallel, (id) => judge(id, round, issues, hashes.get(id)!));
+    const toJudge = gateClean.filter((id) => passedAs.get(id) !== hashes.get(id));
+    if (toJudge.length) await start(`critic reviewing ${toJudge.length} section(s)`, round);
+    await pool(toJudge, parallel, (id) => judge(id, round, issues, hashes.get(id)!));
     clean = gateClean.filter((id) => passedAs.get(id) === hashes.get(id));
     const live = ids.filter((id) => everGreen.has(id));
     await promote(dir, live);
@@ -108,6 +109,7 @@ export async function loop(dir: string, log: Log = runLog(dir)): Promise<Omit<Re
     // A section with a file but no issues only lost its critic call; it is judged again next round, not rebuilt.
     const toFix = bad.filter((id) => issues.some((i) => i.section === id) || !present.includes(id));
     toFix.forEach((id) => fixed.add(id));
+    if (toFix.length) await start(`fixing ${toFix.length} section(s)`, round + 1);
     await pool(toFix, parallel, (id) => callBuilder(id, round + 1, issues.filter((i) => i.section === id)));
   }
 

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -42,6 +42,9 @@ async function lint(stage: string, files: string[]): Promise<Issue[]> {
     }
     const lines = src.split("\n").length;
     if (lines > max) issues.push({ section, source: "lint", severity: "medium", fix: `${file} has ${lines} lines; cut it to ${max} with kit primitives and by mapping over data instead of repeating markup.` });
+    // A made-up image path 404s and leaves a hole in the page.
+    for (const m of src.matchAll(/["'`](\/[\w./-]+\.(?:jpe?g|png|webp|avif|gif|svg))["'`]/g))
+      if (!(await access(join(stage, "public", m[1]!)).then(() => true, () => false))) issues.push({ section, source: "lint", severity: "high", fix: `${m[1]} doesn't exist (${file}:${lineOf(src, m.index)}); use only the images in the section spec's images list, with their width and height.` });
   }
   return issues;
 }

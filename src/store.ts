@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { SECTIONS, writeRegistry } from "./gates.js";
 
 export type SectionSpec = {
-  id: string;
-  goal: string;
+  id: string; goal: string;
   layout: { desktop: string; mobile: string };
   copy: string;
   motion: string[];
+  images?: { src: string; alt: string; width?: number; height?: number }[];
   showpiece?: { kind: "3d" | "pinned"; idea: string; poster: string };
   ref?: number;
 };

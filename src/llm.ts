@@ -11,6 +11,7 @@ type Chunk = { choices?: { delta?: { content?: string | null } }[]; usage?: { pr
 const temperature: Partial<Record<Role, number>> = { intake: 0, builder: 0.2, showpiece: 0.2 };
 // ponytail: fixed 10-minute cap per request; make it an env var if slow self-hosted servers need longer.
 const TIMEOUT_MS = 600_000;
+export const stream = { last: 0 };
 
 const content = (parts: Part[]) =>
   Promise.all(parts.map(async (p) => typeof p === "string" ? { type: "text", text: p }
@@ -39,10 +40,9 @@ export async function ask<T = string>(
   role: Role,
   { system, user, schema, check }: { system: string; user: Part[]; schema?: TSchema; check?: (value: T) => string | undefined },
 ): Promise<{ value: T; usage: Usage }> {
-  const ROLE = role.toUpperCase();
-  const url = process.env[`UI_LLM_URL_${ROLE}`] ?? process.env.UI_LLM_URL ?? "http://localhost:8000/v1";
-  const model = process.env[`UI_MODEL_${ROLE}`];
-  if (!model) throw new Error(`Set UI_MODEL_${ROLE} to the model id your server at ${url} serves for the ${role} role.`);
+  const url = process.env[`UI_LLM_URL_${role.toUpperCase()}`] ?? process.env.UI_LLM_URL ?? "http://localhost:8000/v1";
+  const model = process.env[`UI_MODEL_${role.toUpperCase()}`];
+  if (!model) throw new Error(`Set UI_MODEL_${role.toUpperCase()} to the model id your server at ${url} serves for the ${role} role.`);
   const usage: Usage = { model, tokensIn: 0, tokensOut: 0 };
   const messages: { role: string; content: unknown }[] = [{ role: "system", content: system }, { role: "user", content: await content(user) }];
   let error = "";
@@ -54,8 +54,9 @@ export async function ask<T = string>(
       body: JSON.stringify({ model, messages, temperature: temperature[role] ?? 0.3, stream: true, stream_options: { include_usage: true }, ...(schema && { response_format: { type: "json_schema", json_schema: { name: role, schema } } }) }),
     });
     if (!res.ok) throw Object.assign(new Error(`${role} call to ${url} failed with HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`), { usage });
-    // Streamed: without it the server sends headers only when the answer is complete, and fetch gives up on headers after 5 minutes.
-    const chunks = (await res.text()).split("\n").filter((l) => l.startsWith("data: {")).map((l) => JSON.parse(l.slice(6)) as Chunk);
+    // Streamed, or the server sends headers only when done and fetch gives up after 5 minutes; each piece is time-stamped so the live view can tell a writing model from a silent server.
+    const stamped = res.body!.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({ transform: (piece, out) => { stream.last = Date.now(); out.enqueue(piece); } }));
+    const chunks = (await new Response(stamped).text()).split("\n").filter((l) => l.startsWith("data: {")).map((l) => JSON.parse(l.slice(6)) as Chunk);
     const text = chunks.map((c) => c.choices?.[0]?.delta?.content ?? "").join("");
     usage.tokensIn += chunks.findLast((c) => c.usage)?.usage?.prompt_tokens ?? 0;
     usage.tokensOut += chunks.findLast((c) => c.usage)?.usage?.completion_tokens ?? 0;

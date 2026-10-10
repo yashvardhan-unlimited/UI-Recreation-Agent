@@ -56,6 +56,7 @@ const Spec = Type.Object({
   layout: Type.Object({ desktop: Text, mobile: Text }),
   copy: Text,
   motion: Type.Array(Type.String()),
+  images: Type.Optional(Type.Array(Type.Object({ src: Text, alt: Type.String() }), { maxItems: 8 })),
   showpiece: Type.Optional(Type.Object({ kind: Type.Union([Type.Literal("3d"), Type.Literal("pinned")]), idea: Text, poster: Text })),
   ref: Type.Optional(Type.Integer({ minimum: 0 })),
 });

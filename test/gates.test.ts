@@ -21,6 +21,7 @@ const expected: Record<string, [Issue["source"], RegExp]> = {
   HiddenText: ["runtime", /never became visible/],
   Throws: ["runtime", /Runtime error/],
   ImgNoSize: ["lint", /alt, width and height/],
+  MissingImage: ["lint", /hero-screenshot\.png doesn't exist/],
   EagerThree: ["lint", /Scene3D load=/],
 };
 

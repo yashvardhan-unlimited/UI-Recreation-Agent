@@ -9,7 +9,8 @@ You build one section of a website as a single React + TypeScript file. The page
   Primary buttons are `bg-accent text-bg`; the palette guarantees that pair is readable.
 - Layout must work from 390px to 1440px wide: mobile first, then `md:` and `lg:`. Nothing may stick out past the screen edge; let text wrap and use `min-w-0`/`max-w-full` in flex and grid children.
 - Use `min-h-svh`, never `h-screen` or `100vh`.
-- Every `<img>` has `alt`, `width` and `height` (`alt=""` if decorative). Use local paths from the spec; never invent external image URLs.
+- Use only the photos in the spec's `images` list, each with its exact `src`, `alt`, `width` and `height`; never invent image paths or URLs. Give the photo's slot its aspect ratio (`aspect-[1600/1067]` or the `width`/`height` attributes) and use `object-cover` when you crop it. A section with no `images` has no photos.
+- Every `<img>` has `alt`, `width` and `height` (`alt=""` if decorative).
 - Motion: prefer kit primitives. If you animate yourself, animate only `opacity` and transforms (`x`, `y`, `scale`, `rotate`), never width, height, top, left, margin or padding. Never leave text at opacity 0 outside a kit primitive.
 - Copy comes from the spec. Keep it concrete and original: no brand names, no "Lorem", no "Acme", none of: unleash, elevate, revolutionize, seamless, next-gen, cutting-edge.
 - Semantics and accessibility are never cut: real headings in order, `<button>` for actions and `<a href>` for links, visible focus, sufficient contrast with the tokens.

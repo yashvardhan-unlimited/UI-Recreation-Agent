@@ -115,18 +115,27 @@ The agent recreates structure, rhythm, type scale, colors and motion, and writes
 
 To **ask for a style**, say it in the request ("make it feel like a printed magazine", "dark and technical", "bold and colorful"); the director plans around it. (The three style presets in `presets/` are used by the eval harness; the `ui` tool doesn't pick them automatically yet.)
 
+To **use your own photos**, put them (JPEG, PNG, WebP or AVIF; any size) in an `images` folder inside the project folder before asking for the site. The agent shrinks each to at most 1600 px wide, has the vision model describe it once, and the director places each photo where it fits. Any image slot without a fitting photo of yours gets a free stock photo from [Openverse](https://openverse.org) (CC0 or public domain only, so no credit line is needed), and the plain placeholder only if nothing is found or there is no internet. Photos are picked up on the next build request; edits to an existing site aren't available yet. iPhone HEIC files can't be read: export them as JPEG first.
+
 ### What happens while it works
 
 On the model server, a five-section site took about 11 minutes in testing: about 2 minutes of planning, under a minute to write the sections, then 3–5 minutes per check-and-fix round. Sites whose sections pass in the first round finish sooner. You'll see progress lines like:
 
 ```text
+… planning the site: direction, design tokens and sections (often 2–4 min)
 ✓ direct
+… building 5 section(s), 3 at a time
 ✓ build Hero (round 0)
+… checking: type-check, build, then the browser at 390 and 1440px (round 0)
 ✗ gates (round 0) — 1 issues, 5 mounted: Menu/runtime: <div class="w-[900px]"> sticks out 510px past the vi…
+… critic reviewing 4 section(s) (round 0)
 ✓ critic Hero (round 0) — score 8
-✓ fix Menu (round 1)
-✓ promote (round 1) — Hero,Menu,Visit
+⏳ 1m 20s since the last update · the model is writing
 ```
+
+Lines starting with `…` say what just started; `✓`/`✗` say what finished. The last line ticks every 5 seconds, so you can always tell it is alive:
+- **"the model is writing"**: a model is producing output (the director often thinks for 2–4 minutes); just wait.
+- **"no model output for 3m …: the model server is busy (another session?) or loading a model"**: your request is queued on the model server, usually behind another pi session using the same model. It carries on by itself when the server answers. To see what the server is doing, open `http://127.0.0.1:18080/api/ps`. Closing the other session helps now; letting Ollama keep both models loaded and answer several requests at once (`OLLAMA_MAX_LOADED_MODELS=2`, `OLLAMA_NUM_PARALLEL=3` on the server) fixes it for good.
 
 1. The **director** commits to a direction, writes `DESIGN.md`, picks colors (checked for readable contrast) and Google Fonts (checked that they exist), and plans 4–7 sections.
 2. **Builders** write all sections in parallel.
@@ -178,6 +187,9 @@ Inside your project folder:
 | `.ui/runs/<time>.jsonl` | one line per model call and gate round: model, tokens, time, issues found |
 | `.ui/shots/<round>/<390 or 1440>/<Section>.png` | the screenshots the critic saw |
 | `.ui/ref/` | the captured reference (clone only): facts, section crops, scroll frames, hover |
+| `images/` | your photos (you create this folder; the agent only reads it) |
+| `site/public/images/` | the photos the site uses: yours, resized, and the stock photos it downloaded |
+| `.ui/images.json` | each photo's size and description, and the source page of every stock photo |
 
 `site/node_modules` is a link to the agent's kit install, so a new site needs no download. To give a site its own copy (for example before moving it elsewhere), run `npm install` inside `site/`.
 
@@ -228,7 +240,7 @@ Reference recreation is evaluated too once you fill in the URLs in `evals/refs.j
 
 - New sites and recreations work. Edits, restyles, motion changes and audits of an existing site are not available yet.
 - 3D showpieces are unfinished: a section planned as a showpiece is left out.
-- One page per site. Images are placeholders (`/demo/photo.svg`) in fixed aspect-ratio slots, so real images can replace them without layout shifts.
+- One page per site. Images come from your `images/` folder, then Openverse stock, then the placeholder (`/demo/photo.svg`); swapping photos on an existing site needs a new build until the edit flow exists.
 - A request can't be cancelled once started; each model call is limited to 10 minutes.
 - Generated copy is the director's; review it before publishing.
 - The older prototype (`ui-agent` command, `ui-agent doctor`, Groq fallback, `.ui-agent/` folder) is still in the repository but no longer used by the UI Agent. Its removal is pending approval.

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { analyzeImage, analyzeSection, direct, kitApi, type Description } from "./agents.js";
 import { capture, cropImage, type Facts, type Reference } from "./capture.js";
 import { SECTIONS, writeRegistry } from "./gates.js";
+import { describePhoto, resolveImages, userPhotos } from "./images.js";
 import type { Role, Usage } from "./llm.js";
 import { loop, pool, type Report } from "./loop.js";
 import { copyProject, paths, runLog, savePlan, syncStage, type Event, type Plan } from "./store.js";
@@ -78,10 +79,14 @@ async function prepare(dir: string) {
   await syncStage(dir);
 }
 
-// Director → tokens and fonts → every section built in parallel → gate, judge, fix and promote.
+// The user's photos → director → images resolved to files → tokens and fonts → every section built in parallel → gate, judge, fix and promote.
 async function planAndBuild(dir: string, brief: string, ctx: Omit<Parameters<typeof direct>[1], "kit">, log: Log, spent: Spent, started: number): Promise<Report> {
   const p = paths(dir);
-  const { design, ...plan } = await call(log, spent, "direct", "director", async () => direct(brief, { kit: await kitApi(join(p.stage, "src", "kit")), ...ctx }));
+  const photos = await userPhotos(dir, (file) => call(log, spent, "photo", "analyst", () => describePhoto(file)).then((r) => r.about), log);
+  const list = photos.map((f) => `- ${f.src} (${f.width}×${f.height}): ${f.about}`).join("\n");
+  await log({ step: "start", ms: 0, ok: true, note: "planning the site: direction, design tokens and sections (often 2–4 min)" });
+  const { design, ...plan } = await call(log, spent, "direct", "director", async () => direct(photos.length ? `${brief}\n\n## Photos\n${list}` : brief, { kit: await kitApi(join(p.stage, "src", "kit")), ...ctx }));
+  await resolveImages(dir, plan, photos, log);
   await savePlan(dir, plan);
   await writeFile(p.design, design);
   await assemble(dir, plan.tokens, log);
@@ -129,6 +134,7 @@ export async function clone(dir: string, source: string, brief: string, opts: { 
   const log = opts.log ?? runLog(dir);
   const spent = { calls: 0, tokensIn: 0, tokensOut: 0 };
   await prepare(dir);
+  await log({ step: "start", ms: 0, ok: true, note: `capturing and analysing the reference ${source}` });
   const { ref, descriptions } = await analyze(dir, source, log, spent);
   // The director gets sizes and weights but not the reference's heading text or address, so none of its copy or brand can leak into the plan.
   const facts = { ...ref.facts, source: undefined, headings: ref.facts.headings.map(({ tag, size, weight }) => ({ tag, size, weight })) };

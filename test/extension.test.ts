@@ -66,7 +66,9 @@ describe("pi -e src/index.ts", () => {
 
   it("streams progress lines and returns a short report with the full Report in details", () => {
     const progress = run.events.filter((e) => e.type === "tool_execution_update").map((e) => e.partialResult!.content[0]!.text).join("\n");
+    expect(progress).toMatch(/… planning the site/);
     expect(progress).toMatch(/✓ direct/);
+    expect(progress).toMatch(/⏳ \dm \d\ds since the last update/);
     expect(progress).toMatch(/✓ promote \(round 0\) — Hero,Beans,Subscribe/);
     const end = run.events.find((e) => e.type === "tool_execution_end")!;
     expect(end.isError).toBe(false);

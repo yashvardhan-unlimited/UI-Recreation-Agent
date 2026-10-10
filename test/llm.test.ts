@@ -1,6 +1,6 @@
 import Type from "typebox";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { ask } from "../src/llm.js";
+import { ask, stream } from "../src/llm.js";
 import { mockLlm } from "./mock-llm.js";
 
 let mock: Awaited<ReturnType<typeof mockLlm>>;
@@ -16,7 +16,10 @@ beforeAll(async () => {
 afterAll(() => mock.close());
 
 it("requests schema output, strips <think>, retries once with the error and sums usage", async () => {
+  const before = Date.now();
   const { value, usage } = await ask<{ kind: string }>("intake", { system: "Classify.", user: ["make a site for a bakery"], schema });
+  // The live view reads this to tell a writing model from a silent server.
+  expect(stream.last).toBeGreaterThanOrEqual(before);
   expect(value).toEqual({ kind: "build" });
   const [first, retry] = mock.requests.filter((r) => r.role === "intake").map((r) => JSON.parse(r.body) as { response_format?: unknown; messages: { content: unknown }[] });
   expect(first!.response_format).toMatchObject({ type: "json_schema" });

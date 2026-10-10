@@ -6,6 +6,7 @@ import { serve } from "./browser.js";
 import { build, clone } from "./flows.js";
 import { intake } from "./intake.js";
 import type { Report } from "./loop.js";
+import { liveView, summary } from "./progress.js";
 import { paths, runLog, type Event } from "./store.js";
 
 // One vite dev server per site, reused across calls; promotion only copies files, so HMR shows each green section as it lands.
@@ -17,16 +18,6 @@ async function preview(site: string) {
   servers.set(site, server);
   return server.url;
 }
-
-const progress = (e: Omit<Event, "t">) =>
-  `${e.ok ? "✓" : "✗"} ${e.step}${e.section ? ` ${e.section}` : ""}${e.round === undefined ? "" : ` (round ${e.round})`}${e.note ? ` — ${e.note.split("\n")[0]!.slice(0, 100)}` : ""}`;
-
-const summary = (r: Report) => [
-  `Preview: ${r.previewUrl}`,
-  ...Object.entries(r.sections).map(([id, s]) => `- ${id}: ${s.status}${s.score === undefined ? "" : ` (${s.score}/10)`}${s.open[0] ? ` — ${s.open[0]}` : ""}`),
-  ...(r.app.length ? [`Page-level: ${r.app.join("; ")}`] : []),
-  `${r.usage.calls} model calls, ${r.usage.tokensIn + r.usage.tokensOut} tokens, ${r.usage.seconds}s. Details in .ui/.`,
-].join("\n");
 
 export default async function uiAgent(pi: ExtensionAPI) {
   pi.registerTool({
@@ -45,24 +36,27 @@ export default async function uiAgent(pi: ExtensionAPI) {
     }),
     async execute(_id, params, _signal, onUpdate, ctx) {
       const dir = resolve(ctx.cwd, params.dir ?? ".");
-      const file = runLog(dir), lines: string[] = [];
+      const file = runLog(dir), view = liveView((text) => onUpdate?.({ content: [{ type: "text", text }], details: undefined }));
       const log = async (e: Omit<Event, "t">) => {
         await file(e);
-        lines.push(progress(e));
-        onUpdate?.({ content: [{ type: "text", text: lines.slice(-8).join("\n") }], details: undefined });
+        view.add(e);
       };
-      // ponytail: the tool can't be cancelled mid-run yet; threading ctx.signal through the flows is the upgrade.
-      // Models fill optional fields with "" (gpt-oss sends ref: ""), which must not turn a build into a clone.
-      const { intent, usage } = await intake(dir, params.request, params.ref?.trim() || undefined);
-      if (usage) await log({ step: "intake", role: "intake", model: usage.model, tokensIn: usage.tokensIn, tokensOut: usage.tokensOut, ms: 0, ok: true, note: intent.kind });
-      let report: Report;
-      if (intent.kind === "build") report = await build(dir, intent.instruction, { log });
-      else if (intent.kind === "clone" && intent.ref) report = await clone(dir, intent.ref, intent.instruction, { log });
-      else throw new Error(intent.kind === "clone" ? "Recreating a design needs a reference: pass the URL or screenshot path as ref." : `The ${intent.kind} flow isn't available yet; this version can build a new site or recreate a reference (pass ref).`);
-      report.previewUrl = await preview(paths(dir).site);
-      // Nested model usage goes into pi's session totals; self-hosted calls cost nothing.
-      const { tokensIn: input, tokensOut: output } = report.usage, none = { cacheRead: 0, cacheWrite: 0 };
-      return { content: [{ type: "text", text: summary(report) }], details: report, usage: { input, output, ...none, totalTokens: input + output, cost: { input: 0, output: 0, ...none, total: 0 } } };
+      try {
+        // ponytail: the tool can't be cancelled mid-run yet; threading ctx.signal through the flows is the upgrade.
+        // Models fill optional fields with "" (gpt-oss sends ref: ""), which must not turn a build into a clone.
+        const { intent, usage } = await intake(dir, params.request, params.ref?.trim() || undefined);
+        if (usage) await log({ step: "intake", role: "intake", model: usage.model, tokensIn: usage.tokensIn, tokensOut: usage.tokensOut, ms: 0, ok: true, note: intent.kind });
+        let report: Report;
+        if (intent.kind === "build") report = await build(dir, intent.instruction, { log });
+        else if (intent.kind === "clone" && intent.ref) report = await clone(dir, intent.ref, intent.instruction, { log });
+        else throw new Error(intent.kind === "clone" ? "Recreating a design needs a reference: pass the URL or screenshot path as ref." : `The ${intent.kind} flow isn't available yet; this version can build a new site or recreate a reference (pass ref).`);
+        report.previewUrl = await preview(paths(dir).site);
+        // Nested model usage goes into pi's session totals; self-hosted calls cost nothing.
+        const { tokensIn: input, tokensOut: output } = report.usage, none = { cacheRead: 0, cacheWrite: 0 };
+        return { content: [{ type: "text", text: summary(report) }], details: report, usage: { input, output, ...none, totalTokens: input + output, cost: { input: 0, output: 0, ...none, total: 0 } } };
+      } finally {
+        view.stop();
+      }
     },
   });
 

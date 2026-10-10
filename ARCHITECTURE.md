@@ -109,7 +109,8 @@ The UI Agent is the part of our pi-based coding agent that designs, builds, audi
 | 1 | Intake | small model | user request, list of section ids + headings | `Intent` (§7.1) |
 | 2 | Reference capture (clone only) | Playwright | URL or image | `.ui/ref/facts.json`, section crops, motion frames |
 | 3 | Reference analysis (clone only) | vision model | facts + crops + frames | per-section descriptions inside the plan |
-| 4 | Direction + plan | vision model (director) | brief, preset, reference analysis | `DESIGN.md`, `.ui/plan.json` (§7.2) |
+| 4 | Direction + plan | vision model (director) | brief, preset, reference analysis, photo list (§5.7) | `DESIGN.md`, `.ui/plan.json` (§7.2) |
+| 4b | Images | code (+ Openverse) | each planned image | the image file under `public/images/`, its size written into the plan (§5.7) |
 | 5 | Build | coder model ×N in parallel | `DESIGN.md`, kit API, one `SectionSpec` | `stage/src/sections/<Id>.tsx` |
 | 6 | Showpiece (if planned) | strongest coder model | `DESIGN.md`, 3D/scroll kit API, showpiece spec | one lazy-loaded section |
 | 7 | Assemble | code | plan tokens, section files | `tokens.css`, fonts, `sections/index.ts` (only sections that compile) |
@@ -178,7 +179,7 @@ All prompts live in `prompts/*.md`. Code never contains prose aimed at a model.
 - **Ethics rule (in prompt and critic):** recreate structure and feel; write original copy; no logos, brand names, product names or photos.
 
 ### 5.3 Art director — vision model
-- **In:** brief; optional preset `DESIGN.md` (§10); optional reference analysis; motion kit API; showpiece kit API.
+- **In:** brief; optional preset `DESIGN.md` (§10); optional reference analysis; the user's photo list (§5.7); motion kit API; showpiece kit API.
 - **Out:** `DESIGN.md` (≤50 lines, compact Stitch-style sections) + `Plan` (§7.2).
 - Must commit to a **direction card** before planning sections (anti-slop, from taste-skill): theme, type pairing, hero archetype, section rhythm, 3–4 signature components, motion energy. Stored in the plan; the critic checks the site against it.
 - Allocates motion by tier (§6.3): at most **one showpiece** per page, scroll-linked motion at most every other section, hero gets the strongest moment.
@@ -199,6 +200,13 @@ All prompts live in `prompts/*.md`. Code never contains prose aimed at a model.
 - **Out:** `Verdict` (§7.4): score 0–10, slop findings, ≤5 issues each with a concrete code-level fix ("h1 to text-5xl on mobile; it wraps to 5 lines"), never "improve X".
 - Judges only what eyes judge: hierarchy, typography, spacing rhythm, contrast, mobile layout, fidelity to spec/reference, slop. Everything measurable is already done by gates.
 - Pass = score ≥ `UI_PASS_SCORE` (default 7) and no high-severity issue.
+
+### 5.7 Images — code, plus the vision model once per photo
+- **User photos:** every JPEG/PNG/WebP/AVIF in `<project>/images/` is re-encoded in Chromium to at most 1600 px wide (JPEG, or PNG to keep transparency) into `public/images/<content hash>` of `site/` and stage, so a phone photo can't fail the LCP gate. The vision model (analyst role, `prompts/photo.md`) describes each photo once: subject, mood, where text could sit. Size and description are cached in `.ui/images.json`. An unreadable file (e.g. HEIC) is skipped with a message saying how to fix it.
+- **Director:** gets the photo list under the brief and fills each section's `images` with a listed path where one fits, otherwise `stock:<2–4 search words>`.
+- **Resolve (code):** a listed path gets its size; anything else is searched on Openverse (**CC0 and public domain only**, so no credit line is required; the source page is recorded in `.ui/images.json`), downloaded, re-encoded and cached by query. No result, or no network, means the `/demo/photo.svg` placeholder. Every planned image ends with a real `src`, `width` and `height` before any builder runs.
+- **Gate:** a local image path that doesn't exist in `public/` is a lint issue, so a made-up path never ships.
+- Clone never copies the reference's photos (§5.2); it uses the user's or stock photos like any build.
 
 ---
 
@@ -323,6 +331,7 @@ type SectionSpec = {
   copy: string;               // final text, original
   motion: string[];           // kit primitive names only (validated)
   showpiece?: { kind: "3d" | "pinned"; idea: string; poster: string };
+  images?: { src: string; alt: string; width?: number; height?: number }[];  // director: a listed /images path or "stock:<search words>"; code resolves src and adds the size (§5.7)
   ref?: number;               // index of reference crop to follow
 };
 ```
@@ -347,6 +356,9 @@ type Verdict = { score: number; slop: string[]; issues: Issue[] };
 type Event = { t: number; step: string; role?: string; model?: string; section?: string;
                round?: number; tokensIn?: number; tokensOut?: number; ms: number; ok: boolean; note?: string };
 ```
+A long step also logs `{ step: "start", ms: 0, ok: true, note: "<what is starting>" }` when it begins (director, builders, each round's checks, critic, fixes, reference capture), so the log and the live view show what is running, not only what finished. Start events carry no `role`, so they never count as model calls.
+
+**Live view (`progress.ts`):** the tool shows the last 8 events plus a status line repainted every 5 s: time since the last event, "the model is writing" while any model call is streaming, and a "model server busy or loading a model" warning after 3 minutes without model output.
 
 ### 7.6 Report (returned to the main agent)
 ```ts
@@ -383,6 +395,7 @@ ui-agent/
   ARCHITECTURE.md         this file
   src/
     index.ts              pi extension: `ui` tool, /ui command, provider          ≤ 100
+    progress.ts           live view (progress lines + 5 s status line), report text ≤ 40
     intake.ts             rule shortcuts + intake model call → Intent              ≤ 60
     flows.ts              build / clone / edit / style / motion / audit             ≤ 150
     loop.ts               assemble → gates → critic → fix → promote/rollback       ≤ 130
@@ -390,8 +403,9 @@ ui-agent/
     llm.ts                OpenAI-compatible client, schema output, 1 retry, usage  ≤ 70
     gates.ts              lint rules, tsc per section, build, manifest check       ≤ 120
     browser.ts            reference capture + audit (Playwright)                    ≤ 220
+    images.ts             user photos + CC0 stock → public/images, sizes into plan  ≤ 125
     store.ts              paths, plan load/save, stage/site sync, snapshots, log   ≤ 80
-  prompts/                intake.md director.md analyst.md builder.md showpiece.md critic.md
+  prompts/                intake.md director.md analyst.md builder.md showpiece.md critic.md photo.md
   presets/                compact DESIGN.md presets (style starting points)
   kit/                    template copied into each new site (not counted in budget)
   test/                   mock model server + e2e (not counted)
@@ -473,12 +487,13 @@ Total budget for `src/`: **~1,100–1,300 lines**. If a change would break a fil
 | `UI_JANK_MS` | 120 | worst allowed frame while scrolling |
 | `UI_SECTION_LINES` | 150 | builder output line budget |
 | `UI_CHROME_PATH` | Playwright Chromium | use an existing browser |
+| `UI_STOCK_URL` | `https://api.openverse.org/v1` | stock photo search (Openverse API) for image slots without a user photo |
 
 ---
 
 ## 15. Open decisions
 
 1. **Single page vs multi-page.** The plan supports `pages[]`; start with one page and add routing only when needed.
-2. **Images.** Placeholder service vs user-provided assets vs a self-hosted image model. Builders always reserve fixed aspect-ratio slots so swapping images never shifts layout.
+2. ~~**Images.**~~ Decided: the user's photos first, CC0 stock as the fallback, the placeholder last (§5.7). A self-hosted image model stays out until evals show stock falls short. Builders always reserve fixed aspect-ratio slots so swapping images never shifts layout.
 3. **Main agent model.** If it is also self-hosted, keep its tool surface to the single `ui` tool.
 4. **Preview surface.** `vite dev` on `site/` with HMR is the default; promotion copies files, so the preview updates without ever seeing stage.

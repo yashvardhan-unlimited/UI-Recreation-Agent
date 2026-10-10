@@ -104,16 +104,17 @@ Both models stay loaded together on the server (~66 GB), so nothing swaps betwee
 | `UI_SECTION_LINES` | `150` | line budget per generated section |
 | `UI_CHROME_PATH` | Playwright's Chromium | use another Chromium |
 | `UI_FONTS_URL` | `https://fonts.googleapis.com` | Google Fonts or a mirror |
+| `UI_STOCK_URL` | `https://api.openverse.org/v1` | stock photo search for image slots your own photos don't fill |
 
 ## Current status
 
-Working and tested: building a new site from a request, recreating a design from a link or a screenshot, the quality gates and browser checks, the critic, promotion and rollback, the pi tool, the `/ui` command, the `selfhosted` provider and the live preview. The eval harness (`npm run eval`) runs 20 briefs headless and writes a CSV.
+Working and tested: building a new site from a request, recreating a design from a link or a screenshot, the quality gates and browser checks, the critic, promotion and rollback, your own photos from `images/` with CC0 stock photos as the fallback, the pi tool, the `/ui` command, the `selfhosted` provider and the live preview. The eval harness (`npm run eval`) runs 20 briefs headless and writes a CSV.
 
 Not done yet:
 
 - **Edit, style, motion and audit requests** on an existing site are routed correctly but answered with "this flow isn't available yet".
 - **3D showpieces are incomplete.** A section the director plans as a 3D or pinned showpiece fails and is left out: the showpiece prompt and its 3D browser checks are still missing. Ordinary sections can still use scroll motion.
-- One page per site; images are placeholders (`/demo/photo.svg`).
+- One page per site.
 - A running request can't be cancelled; each model call is capped at 10 minutes.
 
 The repository still contains the earlier prototype (`src/cli.ts`, `src/pi/`, `src/tools/`, `tests/`, `docs/` and the `ui-agent` command with its doctor and Groq fallback). The UI Agent doesn't use any of it; its removal is pending approval.
